@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>로빈슨 — 유닛 스프라이트 시트 목업 (18-7)</title>
+<style>
+  :root{ --bg:#0e1620; --panel:#1b2836; --line:#2e4056; --ink:#e8eef5; --dim:#93a4b8; --cyan:#67e4ff; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Malgun Gothic","Segoe UI",system-ui,sans-serif}
+  header{padding:26px 28px 4px}
+  h1{margin:0 0 6px;font-size:22px}
+  header p{margin:0;color:var(--dim);font-size:13px;line-height:1.55}
+  .wrap{padding:18px 28px 40px;display:flex;flex-direction:column;gap:22px}
+  .sect>h2{font-size:15px;margin:0 0 10px}
+  .sect>h2 small{color:var(--dim);font-weight:400;font-size:12px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
+  .card{background:linear-gradient(180deg,#1b2836,#16212e);border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;flex-direction:column;align-items:center;gap:6px}
+  .card.wide{grid-column:1/-1}
+  .sprite{display:flex;align-items:flex-end;justify-content:center;gap:16px;min-height:96px;padding:8px 4px 2px;flex-wrap:wrap}
+  .name{font-size:13px;font-weight:700}
+  .spec{font-size:10.5px;color:var(--dim);text-align:center;line-height:1.55}
+  .posemini{display:flex;flex-direction:column;align-items:center;gap:3px}
+  .poselabel{font-size:10px;color:var(--dim)}
+  .swatches{display:flex;flex-wrap:wrap;gap:9px}
+  .sw{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;color:var(--dim);text-align:center}
+  .sw i{width:26px;height:26px;border-radius:6px;border:1px solid #00000066;display:block}
+  .scalebox{display:flex;gap:30px;align-items:flex-end;flex-wrap:wrap}
+  .rules{margin:0;padding-left:18px}
+  .rules li{font-size:12.5px;color:#cfe3f5;margin:5px 0;line-height:1.55}
+</style>
+</head>
+<body>
+<header>
+  <h1>🧸 유닛 스프라이트 시트 목업 <span style="color:#93a4b8;font-size:13px">— GDD 18-7 · 22~28px 실루엣 싸움</span></h1>
+  <p>1px 윤곽 + 소품으로 구분한다 — 색만으론 안 읽힌다. (도식 목업 · 4배 확대 표시 · 최종은 Aseprite에서 팔레트+윤곽 손보정, 18-8)</p>
+</header>
+<div class="wrap">
+
+  <section class="sect">
+    <h2>① 장난감 병정 5종 <small>— 공통 몸통 1개 + 소품 5개 (18-8 1인 최소화)</small></h2>
+    <div class="grid" id="soldiers"></div>
+  </section>
+
+  <section class="sect">
+    <h2>② 로빈슨 <small>— 26×38 · 모자·수염이 실루엣</small></h2>
+    <div class="grid">
+      <div class="card wide">
+        <div class="sprite" id="robinposes"></div>
+        <div class="spec"><b>운반</b> 포즈 = 탭 위임의 핵심 (노드 → 쉘터 → 창고, 17-8) · 프레임 수는 18-7 표</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sect">
+    <h2>③ 야생 · 적 <small>— 실루엣만으로 즉시 구분</small></h2>
+    <div class="grid" id="wildcards"></div>
+  </section>
+
+  <section class="sect">
+    <h2>④ 자동화 도구 <small>— 철기 · HP 없음 = 털리면 빈 자리만 남는다 (12-3)</small></h2>
+    <div class="grid" id="toolcards"></div>
+  </section>
+
+  <section class="sect">
+    <h2>⑤ 농사 조각 <small>— 밭은 유저당 1개 (확정 · 8-4)</small></h2>
+    <div class="grid" id="farmcards"></div>
+  </section>
+
+  <section class="sect">
+    <h2>⑥ 팔레트 · 실크기 · 규칙</h2>
+    <div class="grid">
+      <div class="card wide"><div class="swatches" id="swatches"></div></div>
+      <div class="card wide">
+        <div class="scalebox" id="scalebox"></div>
+        <div class="spec">1× = 실제 픽셀 (폰 화면 크기) / 4× = 확대 — 병정 22×28 · 로빈슨 26×38 · 멧돼지 54×42</div>
+      </div>
+      <div class="card wide" style="align-items:stretch">
+        <ul class="rules">
+          <li><b>1px 윤곽(#23180f)</b> — 어떤 바닥색 위에서도 읽힌다 (18-7)</li>
+          <li><b>병정 = 공통 몸통 + 소품 교체</b> — 방패(청동 원형)·밧줄갈고리·활·북·폭죽, 몸통은 1개</li>
+          <li><b>털린 자리</b> — 자동화 도구는 걷히고 빈 그림자만 남긴다 (약탈의 흔적)</li>
+          <li><b>애니 태그</b> — idle·walk 기본, 공격/특기는 유닛별 (18-7 표의 프레임 수)</li>
+          <li><b>디오라마 뷰</b> — 개별 스프라이트 회전 금지, 발치 그림자 α.3 (18-4) · 섬맵은 360° 일괄 회전 (18-4⑤)</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+</div>
+<script>
+const OUT="#23180f";
+const svg=(w,h,inner,s=4)=>`<svg viewBox="0 0 ${w*s} ${h*s}" width="${w*s}" height="${h*s}" role="img"><g transform="scale(${s})">${inner}</g></svg>`;
+
+/* ---------- 병정 : 공통 몸통 + 소품 ---------- */
+const soldierBase=`
+<ellipse cx="11" cy="27" rx="8" ry="2" fill="#000" opacity=".14"/>
+<rect x="6" y="21" width="4" height="6" fill="#2f3f5c" stroke="${OUT}" stroke-width="0.9"/>
+<rect x="12" y="21" width="4" height="6" fill="#2f3f5c" stroke="${OUT}" stroke-width="0.9"/>
+<rect x="2.6" y="12" width="3" height="8" rx="1" fill="#34506f" stroke="${OUT}" stroke-width="0.9"/>
+<rect x="16.4" y="12" width="3" height="8" rx="1" fill="#34506f" stroke="${OUT}" stroke-width="0.9"/>
+<rect x="5" y="10" width="12" height="12" rx="1.5" fill="#3d5a80" stroke="${OUT}"/>
+<rect x="5" y="17.6" width="12" height="1.8" fill="#8a5a33" stroke="${OUT}" stroke-width="0.5"/>
+<circle cx="11" cy="6" r="4.8" fill="#e8b48c" stroke="${OUT}"/>
+<path d="M6.4,5.6 q4.6,-7 9.2,0 l0,0.9 l-9.2,0 z" fill="#2b4a7a" stroke="${OUT}"/>
+<circle cx="9.4" cy="6.9" r="0.7" fill="${OUT}"/><circle cx="12.6" cy="6.9" r="0.7" fill="${OUT}"/>`;
+const SOL={
+  shield:`<circle cx="3.4" cy="15" r="4.6" fill="#c98a3c" stroke="${OUT}"/><circle cx="3.4" cy="15" r="1.7" fill="#8a5a2c" stroke="${OUT}" stroke-width="0.6"/><path d="M1.4,13 q2,-1 4,0 M1.4,17 q2,1 4,0" stroke="#a06f2c" stroke-width="0.6" fill="none"/>`,
+  climb:`<path d="M15.8,3.6 q4.4,-2.2 4.6,2.2 q0.2,3 -3.4,2.8" stroke="#b98c50" stroke-width="1.2" fill="none"/><path d="M15.6,7.6 q-5.4,4.4 -1.2,10.4 q-3.8,-1.6 -5.4,-5.4" stroke="#b98c50" stroke-width="1.1" fill="none"/>`,
+  archer:`<path d="M19.8,4.8 q4.8,7.4 0,15" stroke="#7a5a3a" stroke-width="1.5" fill="none"/><line x1="19.8" y1="4.8" x2="19.8" y2="19.8" stroke="#e8e2d4" stroke-width="0.8"/><line x1="14.4" y1="12.3" x2="20.6" y2="12.3" stroke="#c9a06a" stroke-width="0.9"/>`,
+  drum:`<rect x="13.6" y="12.2" width="8" height="8.4" rx="1" fill="#c04545" stroke="${OUT}"/><line x1="14" y1="14.2" x2="21.2" y2="14.2" stroke="#8a2f2f" stroke-width="0.8"/><line x1="7.6" y1="10.4" x2="14.6" y2="13.8" stroke="#c9a06a" stroke-width="1.3"/><line x1="15.4" y1="10.2" x2="18.6" y2="13.6" stroke="#c9a06a" stroke-width="1.3"/>`,
+  firecracker:`<rect x="14.6" y="6.6" width="4.4" height="10" rx="1.2" fill="#d24a3a" stroke="${OUT}"/><path d="M16.8,6.6 q-1.2,-1.8 0.4,-2.8" stroke="#e8e2d4" stroke-width="0.9" fill="none"/><circle cx="17.4" cy="3.2" r="1.1" fill="#ffd75e" stroke="${OUT}" stroke-width="0.6"/>`
+};
+const soldier=(k)=>svg(22,28,soldierBase+SOL[k]);
+
+/* ---------- 로빈슨 4포즈 ---------- */
+const robinInner=(pose)=>{
+  const shadow=`<ellipse cx="13" cy="36.8" rx="9" ry="2.2" fill="#000" opacity=".14"/>`;
+  let legs=`<rect x="8.2" y="31.8" width="4" height="5" fill="#6b4a2e" stroke="${OUT}"/><rect x="13.8" y="31.8" width="4" height="5" fill="#6b4a2e" stroke="${OUT}"/>`;
+  const torso=`<rect x="7.6" y="19" width="10.8" height="13.4" rx="2" fill="#c2703f" stroke="${OUT}"/><rect x="7.6" y="26.4" width="10.8" height="1.8" fill="#8a5a33" stroke="${OUT}" stroke-width="0.5"/>`;
+  const head=`<circle cx="13" cy="13.6" r="5" fill="#e8b48c" stroke="${OUT}"/><path d="M9.8,15.2 q3.2,4.4 6.4,0 q-0.5,3.6 -3.2,3.6 q-2.7,0 -3.2,-3.6 z" fill="#e8e2d4" stroke="${OUT}" stroke-width="0.5"/><circle cx="11.4" cy="13" r="0.7" fill="${OUT}"/><circle cx="14.6" cy="13" r="0.7" fill="${OUT}"/><rect x="6.6" y="7.4" width="12.8" height="2.4" rx="1.2" fill="#8a5a33" stroke="${OUT}"/><path d="M9.2,7.6 q0,-5.2 3.8,-5.2 q3.8,0 3.8,5.2 z" fill="#a06a3c" stroke="${OUT}"/><rect x="9.2" y="4.4" width="7.6" height="1.6" fill="#8a5a33"/>`;
+  let arms=`<rect x="4.6" y="20" width="2.8" height="8.4" rx="1" fill="#a85f36" stroke="${OUT}"/><rect x="18.6" y="20" width="2.8" height="8.4" rx="1" fill="#a85f36" stroke="${OUT}"/>`;
+  let extra="";
+  if(pose==="walk"){
+    legs=`<rect x="6.8" y="31.6" width="4" height="5.2" fill="#6b4a2e" stroke="${OUT}"/><rect x="15.2" y="31.6" width="4" height="5.2" fill="#6b4a2e" stroke="${OUT}"/>`;
+    arms=`<rect x="4.6" y="20" width="2.8" height="7.6" rx="1" fill="#a85f36" stroke="${OUT}"/><rect x="18.8" y="18.8" width="2.8" height="8" rx="1" fill="#a85f36" stroke="${OUT}" transform="rotate(16 20.2 22.8)"/>`;
+  }
+  if(pose==="chop"){
+    arms=`<rect x="4.6" y="20" width="2.8" height="8.4" rx="1" fill="#a85f36" stroke="${OUT}"/><rect x="18.2" y="17.2" width="2.8" height="9" rx="1" fill="#a85f36" stroke="${OUT}" transform="rotate(-38 19.6 21.7)"/>`;
+    extra=`<line x1="21.2" y1="12.6" x2="24.6" y2="4.4" stroke="#8a5a33" stroke-width="1.6"/><path d="M22.2,2.4 l4.8,2.2 l-1.8,3.4 l-4.4,-2.4 z" fill="#9aa4ad" stroke="${OUT}" stroke-width="0.8"/>`;
+  }
+  if(pose==="carry"){
+    arms=`<rect x="6.8" y="21.4" width="2.8" height="7" rx="1" fill="#a85f36" stroke="${OUT}" transform="rotate(24 8.2 24.9)"/><rect x="16.4" y="21.4" width="2.8" height="7" rx="1" fill="#a85f36" stroke="${OUT}" transform="rotate(-24 17.8 24.9)"/>`;
+    extra=`<rect x="15.4" y="23.4" width="11" height="4.6" rx="1.8" fill="#8a5a33" stroke="${OUT}"/><line x1="18.2" y1="23.6" x2="18.2" y2="27.8" stroke="#6b4a2e" stroke-width="0.7"/><line x1="23.4" y1="23.6" x2="23.4" y2="27.8" stroke="#6b4a2e" stroke-width="0.7"/>`;
+  }
+  return shadow+legs+arms+torso+head+extra;
+};
+
+/* ---------- 멧돼지 · 해적 ---------- */
+const boarInner=`
+<ellipse cx="27" cy="39.6" rx="18" ry="2.6" fill="#000" opacity=".14"/>
+<rect x="11.6" y="31.6" width="4" height="7.4" fill="#4a3220" stroke="${OUT}"/>
+<rect x="18.6" y="32.4" width="4" height="7.4" fill="#4a3220" stroke="${OUT}"/>
+<rect x="30.6" y="32.4" width="4" height="7.4" fill="#4a3220" stroke="${OUT}"/>
+<rect x="37.6" y="31.6" width="4" height="7.4" fill="#4a3220" stroke="${OUT}"/>
+<path d="M11.6,17.2 L16,9.8 L20.8,15.6 L26,8.6 L31,15.6 L36,10.4 L40.8,17.2 Z" fill="#4a3220" stroke="${OUT}"/>
+<ellipse cx="25.6" cy="23.4" rx="16.6" ry="11.2" fill="#7a5230" stroke="${OUT}"/>
+<path d="M9.4,21.6 q-3.6,-0.4 -2.8,-3.6" stroke="#4a3220" stroke-width="1.2" fill="none"/>
+<circle cx="41.6" cy="24" r="8.4" fill="#7a5230" stroke="${OUT}"/>
+<path d="M46.4,16.8 q3,-3.4 5.4,-0.8" fill="#4a3220" stroke="${OUT}" stroke-width="0.6"/>
+<rect x="47.2" y="22.4" width="6.4" height="4.8" rx="1.7" fill="#8a5a3a" stroke="${OUT}"/>
+<circle cx="49" cy="24.4" r="0.5" fill="${OUT}"/><circle cx="51.8" cy="24.4" r="0.5" fill="${OUT}"/>
+<path d="M47.6,28.8 l4.4,-1.4 l-1.2,3.4 z" fill="#e8e2d4" stroke="${OUT}" stroke-width="0.6"/>
+<circle cx="43.2" cy="22.4" r="0.8" fill="${OUT}"/>`;
+const pirateBoss=`
+<ellipse cx="19" cy="49.4" rx="12" ry="2.6" fill="#000" opacity=".14"/>
+<rect x="12" y="41.6" width="5" height="7.4" fill="#3a2f3c" stroke="${OUT}"/>
+<rect x="21" y="41.6" width="5" height="7.4" fill="#3a2f3c" stroke="${OUT}"/>
+<path d="M9.2,24.4 h19.6 l-2,19.6 h-15.6 z" fill="#6b3a52" stroke="${OUT}"/>
+<rect x="9" y="30.8" width="20" height="2.4" fill="#8a5a33" stroke="${OUT}" stroke-width="0.5"/>
+<rect x="5.4" y="25.2" width="3.4" height="10" rx="1" fill="#5c3145" stroke="${OUT}"/>
+<rect x="29.2" y="25.2" width="3.4" height="10" rx="1" fill="#5c3145" stroke="${OUT}"/>
+<circle cx="19" cy="16.6" r="6.4" fill="#e0a87e" stroke="${OUT}"/>
+<path d="M13.6,19.2 q5.4,6.8 10.8,0 q-1,5.2 -5.4,5.2 q-4.4,0 -5.4,-5.2 z" fill="#4a3220" stroke="${OUT}" stroke-width="0.5"/>
+<path d="M10.8,13.6 h16.4 l-3.2,-5.8 h-10 z" fill="#2f2a36" stroke="${OUT}"/>
+<rect x="15.2" y="15" width="4.4" height="3.6" fill="#2f2a36" stroke="${OUT}" stroke-width="0.5"/>
+<line x1="15.6" y1="14.6" x2="23" y2="12.9" stroke="${OUT}" stroke-width="0.6"/>
+<circle cx="22.8" cy="16.8" r="0.8" fill="${OUT}"/>
+<line x1="30.8" y1="27" x2="36.6" y2="36.4" stroke="#c8ccd2" stroke-width="2"/>
+<path d="M29.6,25.4 l3.8,-0.6 l1.6,4.6 l-3.6,0.2 z" fill="#8a5a33" stroke="${OUT}" stroke-width="0.6"/>`;
+const pirateCrew=`
+<ellipse cx="15" cy="41.6" rx="10" ry="2.2" fill="#000" opacity=".14"/>
+<rect x="9.4" y="35" width="4.4" height="6.4" fill="#2f2a36" stroke="${OUT}"/>
+<rect x="16.2" y="35" width="4.4" height="6.4" fill="#2f2a36" stroke="${OUT}"/>
+<path d="M7.2,20.4 h15.6 l-1.6,15.8 h-12.4 z" fill="#6e7276" stroke="${OUT}"/>
+<rect x="7" y="25.6" width="16" height="2" fill="#4a4e54" stroke="${OUT}" stroke-width="0.5"/>
+<rect x="4.2" y="21" width="3" height="8" rx="1" fill="#5d6165" stroke="${OUT}"/>
+<rect x="22.8" y="21" width="3" height="8" rx="1" fill="#5d6165" stroke="${OUT}"/>
+<circle cx="15" cy="13.6" r="5.4" fill="#e0a87e" stroke="${OUT}"/>
+<path d="M9.6,11.2 q5.4,-4.8 10.8,0 l0,2.2 h-10.8 z" fill="#b03a3a" stroke="${OUT}"/>
+<path d="M20.4,11 l3.4,1.6 l-2,1.4 z" fill="#b03a3a" stroke="${OUT}" stroke-width="0.6"/>
+<circle cx="13.2" cy="14.8" r="0.7" fill="${OUT}"/><circle cx="16.8" cy="14.8" r="0.7" fill="${OUT}"/>`;
+
+/* ---------- 자동화 도구 ---------- */
+const collectorInner=`
+<ellipse cx="20" cy="32.6" rx="17" ry="2.4" fill="#000" opacity=".14"/>
+<circle cx="9.6" cy="27.4" r="5" fill="#4a3220" stroke="${OUT}"/><circle cx="9.6" cy="27.4" r="1.4" fill="#8a5a33"/>
+<circle cx="30.4" cy="27.4" r="5" fill="#4a3220" stroke="${OUT}"/><circle cx="30.4" cy="27.4" r="1.4" fill="#8a5a33"/>
+<rect x="4.6" y="19.6" width="30.8" height="7.6" rx="2" fill="#8a5a33" stroke="${OUT}"/>
+<rect x="6" y="21.6" width="28" height="1.4" fill="#a06a3c"/>
+<rect x="17.6" y="5.4" width="3.2" height="13" fill="#a06a3c" stroke="${OUT}"/>
+<rect x="17.6" y="6.6" width="15.4" height="3" rx="1" fill="#a06a3c" stroke="${OUT}"/>
+<path d="M33,5.6 l4.6,-2.2 v8.4 l-4.6,-2.2 z" fill="#9aa4ad" stroke="${OUT}"/>
+<circle cx="14.6" cy="8.4" r="2.6" fill="#7a5a3a" stroke="${OUT}"/>
+<rect x="4.6" y="2.4" width="13" height="3.6" rx="1.8" fill="#0e1620" stroke="${OUT}"/>
+<rect x="5.8" y="3.4" width="7.4" height="1.8" rx="0.9" fill="#f2a03d"/>`;
+const carrierInner=`
+<ellipse cx="20" cy="32.6" rx="15" ry="2.4" fill="#000" opacity=".14"/>
+<circle cx="29" cy="27.6" r="5.2" fill="#4a3220" stroke="${OUT}"/><circle cx="29" cy="27.6" r="1.5" fill="#8a5a33"/>
+<rect x="8" y="19.6" width="24" height="7.6" rx="2.4" fill="#a06a3c" stroke="${OUT}"/>
+<rect x="11.6" y="10" width="13" height="9" rx="1.6" fill="#c9a06a" stroke="${OUT}"/>
+<line x1="18.1" y1="10" x2="18.1" y2="19" stroke="#8a5a33" stroke-width="0.8"/>
+<line x1="11.6" y1="14.5" x2="24.6" y2="14.5" stroke="#8a5a33" stroke-width="0.8"/>
+<path d="M6.6,19.4 L2.4,17.6 M6.6,23 L2.4,24.4" stroke="#7a5a3a" stroke-width="1.6"/>
+<circle cx="14" cy="21.4" r="1.1" fill="#4a7a3c" stroke="${OUT}" stroke-width="0.5"/>
+<circle cx="18.4" cy="21.6" r="1.1" fill="#9aa4ad" stroke="${OUT}" stroke-width="0.5"/>`;
+
+/* ---------- 농사 조각 ---------- */
+const potatoInner=`
+<ellipse cx="6" cy="7.4" rx="4.8" ry="3.6" fill="#b98c50" stroke="${OUT}"/>
+<circle cx="4.2" cy="6.6" r="0.7" fill="#8a5a2c"/><circle cx="7.4" cy="8.4" r="0.7" fill="#8a5a2c"/><circle cx="8" cy="6" r="0.55" fill="#8a5a2c"/>
+<path d="M6,4 q1.4,-2.4 3.4,-1.8" stroke="#4a7a3c" stroke-width="1" fill="none"/>`;
+const cornInner=`
+<rect x="4" y="3.6" width="4.6" height="9.6" rx="2.3" fill="#e8c84a" stroke="${OUT}"/>
+<path d="M4.6,6 h3.4 M4.6,8 h3.4 M4.6,10 h3.4" stroke="#c9a32c" stroke-width="0.6"/>
+<path d="M3.4,9 q-2.4,-0.6 -2.8,-3 q2.4,-0.2 3.6,1.6 z" fill="#4a7a3c" stroke="${OUT}" stroke-width="0.5"/>
+<path d="M8.6,9.4 q2.6,-0.4 3,-3 q-2.4,-0.4 -3.8,1.4 z" fill="#4a7a3c" stroke="${OUT}" stroke-width="0.5"/>
+<path d="M4.4,2.4 q-1.6,1.8 -0.4,4" stroke="#4a7a3c" stroke-width="1" fill="none"/>`;
+const plotInner=(n)=>{
+  let g=`<rect x="1" y="2.6" width="22" height="13.6" rx="2" fill="#6b4a2e" stroke="${OUT}"/><path d="M3,6.4 h18 M3,9.4 h18 M3,12.4 h18" stroke="#54381f" stroke-width="0.8"/>`;
+  if(n===1) g+=`<path d="M12,12.4 q0,-4 0,-5.4" stroke="#3f6b34" stroke-width="1" fill="none"/><path d="M12,8.4 q-2.6,-0.6 -3.4,-2.6 M12,9.4 q2.6,-0.8 3.6,-2.8" stroke="#4a7a3c" stroke-width="0.9" fill="none"/>`;
+  if(n===2) g+=`<circle cx="9.6" cy="9.6" r="2.8" fill="#4a7a3c" stroke="${OUT}" stroke-width="0.5"/><circle cx="13.4" cy="8.6" r="3.2" fill="#3f6b34" stroke="${OUT}" stroke-width="0.5"/><circle cx="16.2" cy="10.4" r="2.2" fill="#4a7a3c" stroke="${OUT}" stroke-width="0.5"/>`;
+  if(n===3) g+=`<ellipse cx="12" cy="11.8" rx="4" ry="2.6" fill="#b98c50" stroke="${OUT}"/><circle cx="10.6" cy="11.4" r="0.5" fill="#8a5a2c"/><circle cx="13" cy="12.4" r="0.5" fill="#8a5a2c"/><path d="M17.6,4.6 l0.9,1.9 2,0.9 -2,0.9 -0.9,1.9 -0.9,-1.9 -2,-0.9 2,-0.9 z" fill="#ffe28a" stroke="${OUT}" stroke-width="0.4"/>`;
+  return svg(24,18,g);
+};
+const wildPotatoInner=`
+<ellipse cx="12" cy="18.6" rx="9" ry="1.8" fill="#000" opacity=".12"/>
+<circle cx="9" cy="11" r="5" fill="#4a7a3c" stroke="${OUT}" stroke-width="0.6"/>
+<circle cx="15" cy="10" r="5.6" fill="#3f6b34" stroke="${OUT}" stroke-width="0.6"/>
+<circle cx="12.6" cy="13.6" r="4.4" fill="#4a7a3c" stroke="${OUT}" stroke-width="0.6"/>
+<ellipse cx="17.6" cy="15.4" rx="3.4" ry="2.6" fill="#b98c50" stroke="${OUT}"/>
+<path d="M13,4.6 q1.6,-2.6 4,-2" stroke="#e8e2d4" stroke-width="1" fill="none"/>`;
+const wildCornInner=`
+<ellipse cx="12" cy="18.6" rx="8" ry="1.8" fill="#000" opacity=".12"/>
+<path d="M12,18 q0,-8 0,-13" stroke="#3f6b34" stroke-width="1.6" fill="none"/>
+<path d="M12,8 q-5.4,-1 -6.6,-4.4 q4.6,-0.4 6.6,2.6 M12,11 q5.4,-1 6.6,-4.4 q-4.6,-0.4 -6.6,2.6" fill="#4a7a3c" stroke="${OUT}" stroke-width="0.5"/>
+<rect x="10.4" y="7.6" width="3.4" height="7" rx="1.7" fill="#e8c84a" stroke="${OUT}" stroke-width="0.7"/>
+<rect x="13.6" y="9.6" width="3.2" height="6.4" rx="1.6" fill="#e8c84a" stroke="${OUT}" stroke-width="0.7"/>`;
+
+/* ---------- 렌더 ---------- */
+const SOLDIERS=[
+  {k:"shield",name:"🛡️ 방패 병정",spec:"22×28 · walk 4 · 막기 2<br>함정을 대신 밟는다 (15-5)"},
+  {k:"climb",name:"🧗 기어오르기 병정",spec:"22×28 · walk 4 · 등반 4<br>팔리사드를 타고 넘는다"},
+  {k:"archer",name:"🏹 사수 병정",spec:"22×28 · walk 4 · 조준 2 · 발사 3<br>감시탑 사거리 밖 저격"},
+  {k:"drum",name:"🥁 북 병정",spec:"22×28 · walk 4 · 연주 4<br>아군 가속 · 적 사격 둔화"},
+  {k:"firecracker",name:"🧨 폭죽 병정",spec:"22×28 · walk 4 · 점화 3 · 폭발 4<br>벽·막사 자폭 · 소모"}
+];
+document.getElementById("soldiers").innerHTML=SOLDIERS.map(u=>`<div class="card"><div class="sprite">${soldier(u.k)}</div><div class="name">${u.name}</div><div class="spec">${u.spec}</div></div>`).join("");
+
+const POSES=[["idle","idle"],["walk","walk"],["chop","채집"],["carry","운반"]];
+document.getElementById("robinposes").innerHTML=POSES.map(([p,label])=>`<div class="posemini">${svg(26,38,robinInner(p),3)}<span class="poselabel">${label}</span></div>`).join("");
+
+document.getElementById("wildcards").innerHTML=
+`<div class="card"><div class="sprite">${svg(54,42,boarInner,3)}</div><div class="name">🐗 멧돼지</div><div class="spec">54×42 · idle 4 · 돌진 4 · 피격 2<br>가시 털 — 중립, 맞으면 돌진 (8-2)</div></div>
+<div class="card"><div class="sprite">${svg(38,52,pirateBoss,3)}${svg(30,44,pirateCrew,3)}</div><div class="name">🏴‍☠️ 해적</div><div class="spec">두목 38×52 · 부하 30×44<br>탁한 자주 / 회색 (18-1) — 웨이브 3 (13-6)</div></div>`;
+
+document.getElementById("toolcards").innerHTML=
+`<div class="card"><div class="sprite">${svg(40,34,collectorInner)}</div><div class="name">⚙️ 채집기</div><div class="spec">40×34 · idle 2 · 가동 4<br>연료 게이지 — 노드 곁에 배치 (12-3)</div></div>
+<div class="card"><div class="sprite">${svg(40,34,carrierInner)}</div><div class="name">🧺 운반기</div><div class="spec">40×34 · idle 2 · 가동 4<br>짐수레 — 현장 → 창고 자동 운반</div></div>
+<div class="card"><div class="sprite"><svg viewBox="0 0 160 96" width="160" height="96"><g transform="scale(4)"><ellipse cx="10" cy="20.6" rx="8" ry="2" fill="#000" opacity=".1"/><rect x="1.6" y="12" width="16.8" height="8" rx="2" fill="#8a5a33" stroke="${OUT}" stroke-opacity=".35" stroke-dasharray="2 1.6"/></g></svg></div><div class="name">털린 자리</div><div class="spec">도구가 걷힌 자리 — 점선 실루엣만 남는다<br>약탈의 흔적: 누가 다녀갔는지 보인다 (12-3)</div></div>`;
+
+document.getElementById("farmcards").innerHTML=
+`<div class="card"><div class="sprite">${svg(12,12,potatoInner)}${svg(12,16,cornInner)}</div><div class="name">🥔 감자 · 🌽 옥수수</div><div class="spec">작물 아이템 — <b>씨앗 = 작물 자신</b> (새 아이템 없음)</div></div>
+<div class="card wide"><div class="sprite">${plotInner(0)}${plotInner(1)}${plotInner(2)}${plotInner(3)}</div><div class="name">🌱 밭 성장 4단계</div><div class="spec">빈 밭 → 새싹 → 잎 → <b>반짝(수확)</b> · 게임 내 하루로 자란다 · <b>유저당 1개 (확정)</b></div></div>
+<div class="card"><div class="sprite">${svg(24,20,wildPotatoInner)}${svg(24,20,wildCornInner)}</div><div class="name">야생 노드</div><div class="spec">야생 감자 풀 · 야생 옥수수대<br>맨손 채집 — 첫 씨앗을 여기서 (7-1)</div></div>`;
+
+const innerMap={robin:()=>robinInner("idle"),soldier:()=>soldierBase+SOL.shield,boar:()=>boarInner};
+const sizeMap={robin:[26,38],soldier:[22,28],boar:[54,42]};
+document.getElementById("scalebox").innerHTML=[["robin","로빈슨"],["soldier","방패 병정"],["boar","멧돼지"]].map(([k,label])=>`<div class="posemini">${svg(sizeMap[k][0],sizeMap[k][1],innerMap[k](),1)}${svg(sizeMap[k][0],sizeMap[k][1],innerMap[k](),4)}<span class="poselabel">${label} — 1× / 4×</span></div>`).join("");
+
+const SW=[["#23180f","윤곽"],["#e8b48c","살색"],["#3d5a80","병정 파랑"],["#2f3f5c","바지"],["#c98a3c","청동"],["#8a5a33","나무"],["#a06a3c","나무 밝"],["#4a7a3c","잎"],["#3f6b34","잎 짙"],["#6b4a2e","흙"],["#b98c50","감자"],["#e8c84a","옥수수"],["#6b3a52","해적 자주"],["#6e7276","해적 회색"],["#ffd75e","강조"]];
+document.getElementById("swatches").innerHTML=SW.map(([c,n])=>`<div class="sw"><i style="background:${c}"></i>${n}<br>${c}</div>`).join("");
+</script>
+</body>
+</html>

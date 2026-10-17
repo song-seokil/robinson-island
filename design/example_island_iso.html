@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>입체 목업 — 절벽 위 본거지 (설계 v1.5)</title>
+<style>
+  :root { --bg:#0b1218; --panel:#0e1620; --line:rgba(111,210,255,.45); --txt:#dbe9f4; --dim:#8fa5b5; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font-family:"Malgun Gothic","Segoe UI",system-ui,sans-serif; }
+  h1 { font-size:19px; margin:14px 20px 4px; }
+  h1 small { color:var(--dim); font-size:13px; font-weight:normal; margin-left:8px; }
+  .sub { margin:0 20px 12px; color:var(--dim); font-size:12.5px; }
+  .wrap { display:flex; flex-wrap:wrap; gap:16px; padding:0 18px; max-width:1560px; margin:0 auto; }
+  .mapbox { flex:1 1 700px; min-width:320px; background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:10px; overflow:hidden; }
+  .side { flex:0 0 340px; display:flex; flex-direction:column; gap:12px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:12px 14px; }
+  .card h3 { margin:0 0 8px; font-size:15px; color:#9ee0ff; }
+  .card ul { margin:0; padding-left:16px; font-size:13px; line-height:1.75; }
+  .card li b { color:#ffe08a; }
+  svg { width:100%; height:auto; display:block; }
+  .lbl { font-size:13px; fill:#eaf4fc; paint-order:stroke; stroke:#0b1218; stroke-width:4px; }
+  .lbl2 { font-size:11.5px; fill:#c8dcec; paint-order:stroke; stroke:#0b1218; stroke-width:3.5px; }
+  .warn { font-size:12px; fill:#ffb3b3; paint-order:stroke; stroke:#0b1218; stroke-width:3.5px; }
+  .strip { display:flex; flex-wrap:wrap; gap:14px; padding:16px 20px 6px; max-width:1560px; margin:0 auto; }
+  .step { flex:1 1 300px; background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:10px 12px 12px; }
+  .step h4 { margin:2px 0 6px; font-size:14px; color:#ffe08a; }
+  .step p { margin:6px 0 0; font-size:12.5px; color:var(--dim); line-height:1.6; }
+  .legend { display:flex; flex-wrap:wrap; gap:8px; padding:10px 20px 24px; max-width:1560px; margin:0 auto; }
+  .chip { background:var(--panel); border:1px solid rgba(111,210,255,.25); border-radius:999px; padding:5px 12px; font-size:12.5px; }
+  .rotbar { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:2px 2px 10px; }
+  .rotbar .hint { flex:1 1 100%; font-size:12.5px; color:#ffe08a; }
+  .rotbar button { background:var(--panel); color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:4px 9px; font-size:12px; cursor:pointer; }
+  .rotbar button.on { border-color:#ffe08a; color:#ffe08a; }
+  .rotbar .deg { font-size:12px; color:var(--dim); min-width:40px; text-align:right; }
+  .mapbox svg { transition:transform .25s ease; touch-action:none; cursor:grab; }
+  .mapbox.grabbing svg { transition:none; cursor:grabbing; }
+</style>
+</head>
+<body>
+<h1>⛰️ 입체 목업 — “절벽 위 본거지” <small>설계 v1.5 · 개척(계단) 반영</small></h1>
+<p class="sub">숲·강·절벽이 높낮이로 보이는 디오라마 뷰 · 실제 구현은 2D 스프라이트 합성으로 이 느낌을 목표로 한다 (18-4)</p>
+
+<div class="wrap">
+  <div class="mapbox">
+  <div class="rotbar" id="rotbar">
+    <span class="hint" id="rotHint">✋ 밀어서 보기 — 좌우 = 돌리기 · 아래로 당기면 가까이 (위로 밀면 원래대로) · 핀치/휠 = 줌</span>
+    <button data-a="0" class="on">0°</button><button data-a="45">45°</button><button data-a="90">90°</button><button data-a="135">135°</button><button data-a="180">180°</button><button data-a="225">225°</button><button data-a="270">270°</button><button data-a="315">315°</button>
+    <span class="deg" id="rotDeg">0°</span>
+  </div>
+  <svg viewBox="0 0 1240 880" xmlns="http://www.w3.org/2000/svg" font-family="'Malgun Gothic','Segoe UI',sans-serif">
+    <defs>
+      <clipPath id="top">
+        <path d="M 140 470 C 150 380, 220 300, 330 250 C 440 200, 580 175, 720 180 C 860 185, 985 230, 1050 310 C 1105 380, 1110 470, 1065 545 C 1020 620, 930 675, 820 710 C 700 748, 560 755, 440 730 C 330 707, 240 660, 185 595 C 145 548, 133 510, 140 470 Z"/>
+      </clipPath>
+      <g id="tree">
+        <path d="M -4 0 L 4 0 L 3 -26 L -3 -26 Z" fill="#8a5a33"/>
+        <ellipse cx="0" cy="-38" rx="26" ry="18" fill="#276840"/>
+        <ellipse cx="-5" cy="-46" rx="22" ry="15" fill="#3f9b52"/>
+        <ellipse cx="-9" cy="-53" rx="13" ry="9" fill="#5fae6b"/>
+      </g>
+      <g id="palm">
+        <path d="M 0 0 C -4 -22, 2 -40, 10 -58" fill="none" stroke="#8a5a33" stroke-width="7" stroke-linecap="round"/>
+        <g stroke="#3f9b52" stroke-width="6" stroke-linecap="round" fill="none">
+          <path d="M 10 -58 q 16 -8 30 -4"/>
+          <path d="M 10 -58 q 16 2 26 14"/>
+          <path d="M 10 -58 q -4 -16 -16 -22"/>
+          <path d="M 10 -58 q -14 -2 -24 8"/>
+          <path d="M 10 -58 q 2 16 -6 26"/>
+        </g>
+      </g>
+      <g id="rock">
+        <ellipse cx="0" cy="-4" rx="15" ry="11" fill="#8b8f95"/>
+        <ellipse cx="-4" cy="-8" rx="9" ry="6" fill="#9aa0a6"/>
+      </g>
+      <marker id="arrR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#ff6b6b"/></marker>
+    </defs>
+
+    <!-- 바다 -->
+    <rect x="0" y="0" width="1240" height="880" fill="#1a527a"/>
+    <g stroke="#2b7bad" stroke-width="3" fill="none" opacity=".8">
+      <path d="M 60 120 q 22 -12 44 0 q 22 12 44 0"/>
+      <path d="M 1050 90 q 22 -12 44 0"/>
+      <path d="M 70 790 q 22 -12 44 0 q 22 12 44 0"/>
+      <path d="M 1090 800 q 22 -12 44 0"/>
+    </g>
+    <!-- 섬 두께(측면) -->
+    <g>
+      <path d="M 140 548 C 133 510, 145 548, 185 673 C 240 738, 330 785, 440 808 C 560 833, 700 826, 820 788 C 930 753, 1020 698, 1065 623 C 1110 548, 1105 458, 1050 388 L 1065 545 C 1020 620, 930 675, 820 710 C 700 748, 560 755, 440 730 C 330 707, 240 660, 185 595 C 145 548, 140 548, 140 548 Z" fill="#5d4429"/>
+      <path d="M 140 508 C 150 418, 220 338, 330 288 C 440 238, 580 213, 720 218 C 860 223, 985 268, 1050 348 L 1065 545 C 1020 620, 930 675, 820 710 C 700 748, 560 755, 440 730 C 330 707, 240 660, 185 595 C 145 548, 133 510, 140 508 Z" fill="#8a6a42"/>
+    </g>
+    <!-- 섬 윗면 -->
+    <path d="M 140 470 C 150 380, 220 300, 330 250 C 440 200, 580 175, 720 180 C 860 185, 985 230, 1050 310 C 1105 380, 1110 470, 1065 545 C 1020 620, 930 675, 820 710 C 700 748, 560 755, 440 730 C 330 707, 240 660, 185 595 C 145 548, 133 510, 140 470 Z" fill="#e0cb98"/>
+
+    <g clip-path="url(#top)">
+      <!-- 풀 지대 -->
+      <path d="M 190 465 C 200 390, 258 322, 352 280 C 445 238, 570 217, 700 220 C 820 224, 927 263, 983 330 C 1030 388, 1034 463, 996 526 C 958 588, 880 634, 785 664 C 680 696, 555 702, 450 681 C 355 662, 278 622, 232 566 C 196 524, 182 500, 190 465 Z" fill="#4b8a53"/>
+
+      <!-- 밀림 바탕 -->
+      <ellipse cx="900" cy="480" rx="195" ry="125" fill="#2b6a3d" opacity=".9"/>
+
+      <!-- 강 + 여울 + 강어귀 -->
+      <path d="M 452 548 C 520 560, 560 578, 600 592 C 650 610, 700 624, 760 636 C 820 648, 870 652, 916 650 C 940 649, 968 654, 988 662" fill="none" stroke="#b98f5a" stroke-width="36" stroke-linecap="round"/>
+      <path d="M 452 548 C 520 560, 560 578, 600 592 C 650 610, 700 624, 760 636 C 820 648, 870 652, 916 650 C 940 649, 968 654, 988 662" fill="none" stroke="#4a90e2" stroke-width="24" stroke-linecap="round"/>
+      <path d="M 452 545 C 520 557, 560 575, 600 589 C 650 607, 700 621, 760 633 C 820 645, 870 649, 916 647 C 940 646, 968 651, 988 659" fill="none" stroke="#8cc4f2" stroke-width="6" stroke-linecap="round" opacity=".85"/>
+      <g fill="#cfd6dd">
+        <ellipse cx="596" cy="594" rx="9" ry="5"/><ellipse cx="612" cy="600" rx="9" ry="5"/><ellipse cx="628" cy="606" rx="9" ry="5"/>
+      </g>
+
+      <!-- 절벽 측면 -->
+      <path d="M 220 400 C 240 436, 320 444, 420 448 C 520 452, 630 436, 675 402 L 675 497 C 630 531, 520 547, 420 543 C 320 539, 240 531, 220 495 Z" fill="#6f7378"/>
+      <g stroke="#5a5f64" stroke-width="3" fill="none" opacity=".9">
+        <path d="M 275 450 q 6 30 2 62"/>
+        <path d="M 360 452 q -4 34 1 68"/>
+        <path d="M 450 455 q 6 32 1 70"/>
+        <path d="M 545 452 q -3 32 2 66"/>
+        <path d="M 620 440 q 6 28 1 58"/>
+      </g>
+      <!-- 절벽 윗면 -->
+      <path d="M 220 400 C 230 330, 300 275, 400 258 C 500 242, 610 250, 670 292 C 715 324, 715 372, 675 402 C 630 436, 520 452, 420 448 C 320 444, 240 436, 220 400 Z" fill="#9aa88f"/>
+      <g stroke="#7d8a75" stroke-width="2.5" fill="none" opacity=".9">
+        <path d="M 300 350 l 8 -12 M 308 350 l 0 -14 M 316 350 l -8 -12"/>
+        <path d="M 520 320 l 8 -12 M 528 320 l 0 -14 M 536 320 l -8 -12"/>
+        <path d="M 400 410 l 8 -12 M 408 410 l 0 -14 M 416 410 l -8 -12"/>
+      </g>
+
+      <!-- 개척한 석조 계단 -->
+      <path d="M 604 424 L 700 548 L 736 528 L 640 408 Z" fill="#8d949c"/>
+      <g stroke="#6f7378" stroke-width="3">
+        <line x1="604" y1="424" x2="640" y2="408"/><line x1="616" y1="439" x2="652" y2="423"/>
+        <line x1="628" y1="455" x2="664" y2="438"/><line x1="640" y1="470" x2="676" y2="453"/>
+        <line x1="652" y1="486" x2="688" y2="468"/><line x1="664" y1="501" x2="700" y2="483"/>
+        <line x1="676" y1="517" x2="712" y2="498"/><line x1="688" y1="532" x2="724" y2="513"/>
+        <line x1="700" y1="548" x2="736" y2="528"/>
+      </g>
+      <line x1="644" y1="404" x2="740" y2="524" stroke="#8a5a33" stroke-width="3"/>
+
+      <!-- 폭포 + 못 -->
+      <path d="M 440 444 L 460 444 C 462 480, 462 508, 458 528 C 457 542, 441 542, 440 528 C 437 508, 438 480, 440 444 Z" fill="#8cc4f2"/>
+      <g stroke="#eaf4fc" stroke-width="2.5" opacity=".8" fill="none">
+        <path d="M 446 452 q -2 20 -1 40"/><path d="M 454 450 q 2 22 1 44"/>
+      </g>
+      <ellipse cx="450" cy="545" rx="30" ry="12" fill="#4a90e2"/>
+      <path d="M 424 545 q 26 10 52 0" stroke="#cfe9f7" stroke-width="3" fill="none" opacity=".8"/>
+
+      <!-- 첫날 야영지 흔적 -->
+      <g transform="translate(252,608)">
+        <line x1="-16" y1="0" x2="0" y2="-26" stroke="#8a5a33" stroke-width="5" stroke-linecap="round"/>
+        <line x1="16" y1="0" x2="0" y2="-26" stroke="#8a5a33" stroke-width="5" stroke-linecap="round"/>
+        <polygon points="-20,-20 20,-24 0,-34" fill="#3f9b52"/>
+        <g fill="#8b8f95">
+          <circle cx="-26" cy="12" r="4"/><circle cx="-14" cy="18" r="4"/><circle cx="0" cy="20" r="4"/>
+          <circle cx="14" cy="18" r="4"/><circle cx="26" cy="12" r="4"/>
+        </g>
+        <ellipse cx="0" cy="14" rx="8" ry="4" fill="#cfd6dd"/>
+      </g>
+
+      <!-- 나무(밀림 + 서쪽 소수) -->
+      <use href="#tree" transform="translate(800,420) scale(1.1)"/>
+      <use href="#tree" transform="translate(862,402) scale(.95)"/>
+      <use href="#tree" transform="translate(930,432) scale(1.2)"/>
+      <use href="#tree" transform="translate(996,474) scale(1)"/>
+      <use href="#tree" transform="translate(890,476) scale(1.3)"/>
+      <use href="#tree" transform="translate(820,492) scale(1.05)"/>
+      <use href="#tree" transform="translate(952,522) scale(1)"/>
+      <use href="#tree" transform="translate(872,544) scale(.9)"/>
+      <use href="#tree" transform="translate(1010,522) scale(.95)"/>
+      <use href="#tree" transform="translate(748,472) scale(.85)"/>
+      <use href="#tree" transform="translate(700,542) scale(.8)"/>
+      <use href="#tree" transform="translate(212,442) scale(.6)"/>
+      <use href="#tree" transform="translate(262,542) scale(.7)"/>
+
+      <!-- 야자수 -->
+      <use href="#palm" transform="translate(578,700)"/>
+      <use href="#palm" transform="translate(884,650) scale(.9)"/>
+
+      <!-- 바위 -->
+      <use href="#rock" transform="translate(520,602)"/>
+      <use href="#rock" transform="translate(256,522) scale(.9)"/>
+      <use href="#rock" transform="translate(962,470)"/>
+      <use href="#rock" transform="translate(410,660) scale(.85)"/>
+    </g>
+
+    <!-- ===== 절벽 위 본거지 (지붕/캐릭터는 클립 밖에서도 표시되게) ===== -->
+    <!-- 팔리사드 -->
+    <g fill="#8a5a33">
+      <rect x="356" y="410" width="6" height="22" rx="2"/><polygon points="356,410 362,410 359,402"/>
+      <rect x="384" y="418" width="6" height="22" rx="2"/><polygon points="384,418 390,418 387,410"/>
+      <rect x="412" y="424" width="6" height="22" rx="2"/><polygon points="412,424 418,424 415,416"/>
+      <rect x="440" y="426" width="6" height="22" rx="2"/><polygon points="440,426 446,426 443,418"/>
+      <rect x="468" y="424" width="6" height="22" rx="2"/><polygon points="468,424 474,424 471,416"/>
+      <rect x="496" y="418" width="6" height="22" rx="2"/><polygon points="496,418 502,418 499,410"/>
+      <rect x="522" y="408" width="6" height="22" rx="2"/><polygon points="522,408 528,408 525,400"/>
+      <rect x="546" y="396" width="6" height="22" rx="2"/><polygon points="546,396 552,396 549,388"/>
+    </g>
+    <!-- 깃발 -->
+    <line x1="352" y1="286" x2="352" y2="252" stroke="#5d3b21" stroke-width="4"/>
+    <polygon points="352,252 386,262 352,272" fill="#e05555"/>
+    <!-- 오두막 -->
+    <g transform="translate(438,336)">
+      <polygon points="-32,0 32,0 32,-20 -32,-20" fill="#a9714b"/>
+      <rect x="-8" y="-16" width="14" height="16" rx="2" fill="#5d3b21"/>
+      <circle cx="18" cy="-12" r="3.5" fill="#ffc94d"/>
+      <polygon points="-38,-20 38,-20 22,-44 -22,-44" fill="#d8b25a"/>
+      <line x1="-22" y1="-44" x2="22" y2="-44" stroke="#b98f47" stroke-width="3"/>
+      <polygon points="-36,-20 36,-20 30,-25 -30,-25" fill="#c19a4b"/>
+    </g>
+    <!-- 감시탑 -->
+    <g>
+      <line x1="520" y1="398" x2="530" y2="374" stroke="#8a5a33" stroke-width="4"/>
+      <line x1="532" y1="398" x2="522" y2="374" stroke="#8a5a33" stroke-width="4"/>
+      <rect x="510" y="366" width="32" height="8" rx="2" fill="#8a5a33"/>
+      <rect x="516" y="346" width="20" height="20" rx="2" fill="#a9714b"/>
+      <polygon points="510,346 542,346 526,328" fill="#d8b25a"/>
+    </g>
+    <!-- 모닥불 + 연기 -->
+    <g transform="translate(388,362)">
+      <line x1="-8" y1="0" x2="8" y2="-4" stroke="#5d3b21" stroke-width="4" stroke-linecap="round"/>
+      <line x1="-6" y1="-4" x2="7" y2="2" stroke="#8a5a33" stroke-width="4" stroke-linecap="round"/>
+      <path d="M 0 -4 C -6 -12, 6 -14, 2 -24" fill="none" stroke="#ff8a3d" stroke-width="4" stroke-linecap="round"/>
+      <path d="M 2 -12 C -2 -20, 8 -22, 5 -34" fill="none" stroke="#cfd6dd" stroke-width="3" stroke-linecap="round" opacity=".65"/>
+    </g>
+
+    <!-- 로빈슨 (절벽 끝, 계단 어귀에 서서 바다를 본다) -->
+    <g transform="translate(622,378)">
+      <ellipse cx="0" cy="2" rx="15" ry="5" fill="rgba(0,0,0,.3)"/>
+      <rect x="-7" y="-16" width="5" height="16" rx="2" fill="#5d3b21"/>
+      <rect x="2" y="-16" width="5" height="16" rx="2" fill="#5d3b21"/>
+      <rect x="-9" y="-32" width="18" height="19" rx="5" fill="#3a6ea5"/>
+      <rect x="-9" y="-20" width="18" height="4" fill="#5d3b21"/>
+      <path d="M 9 -28 q 8 2 12 -2" stroke="#f0c090" stroke-width="5" fill="none" stroke-linecap="round"/>
+      <path d="M -9 -28 q -9 -4 -12 -14" stroke="#f0c090" stroke-width="5" fill="none" stroke-linecap="round"/>
+      <circle cx="0" cy="-40" r="8.5" fill="#f0c090"/>
+      <path d="M -8 -42 a 8.5 8.5 0 0 1 16 0 l -16 0" fill="#5d3b21" opacity="0"/>
+      <ellipse cx="0" cy="-47" rx="12" ry="3.5" fill="#d8b25a"/>
+      <path d="M -8 -47 a 8.5 8.5 0 0 1 16 0 z" fill="#d8b25a"/>
+    </g>
+    <text x="646" y="342" class="lbl2">로빈슨</text>
+
+    <!-- 올라오는 유일한 길(병목) -->
+    <path d="M 706 580 C 686 552, 664 512, 640 460" fill="none" stroke="#ff6b6b" stroke-width="4" stroke-dasharray="11 8" marker-end="url(#arrR)"/>
+
+    <!-- 뗏목 -->
+    <g transform="translate(120,712)">
+      <rect x="-24" y="0" width="48" height="8" rx="4" fill="#8a5a33"/>
+      <rect x="-24" y="10" width="48" height="8" rx="4" fill="#a9714b"/>
+      <line x1="-6" y1="6" x2="-6" y2="-18" stroke="#5d3b21" stroke-width="3"/>
+    </g>
+    <text x="96" y="752" class="lbl2">🛶 뗏목 0/3</text>
+
+    <!-- 라벨 -->
+    <g>
+      <rect x="300" y="216" rx="9" width="380" height="28" fill="rgba(0,0,0,.62)"/>
+      <text x="314" y="235" class="lbl">⛰️ 절벽 위 본거지 — 개척(계단)해야 쓸 수 있다 (5-7)</text>
+    </g>
+    <g>
+      <rect x="742" y="548" rx="9" width="272" height="28" fill="rgba(0,0,0,.62)"/>
+      <text x="756" y="567" class="lbl">⛰️ 석조 계단 = 유일한 길 (병목)</text>
+    </g>
+    <g>
+      <rect x="892" y="296" rx="9" width="252" height="28" fill="rgba(0,0,0,.62)"/>
+      <text x="906" y="315" class="lbl">🌲 밀림 — 잠행(탑이 못 본다)</text>
+    </g>
+    <g>
+      <rect x="548" y="648" rx="9" width="164" height="26" fill="rgba(0,0,0,.62)"/>
+      <text x="560" y="666" class="lbl2" style="font-size:12px">🌊 강 — 여울(도하)</text>
+    </g>
+    <g>
+      <rect x="132" y="650" rx="9" width="212" height="26" fill="rgba(0,0,0,.62)"/>
+      <text x="144" y="668" class="lbl2" style="font-size:12px">🏕️ 첫날 야영지 (흔적)</text>
+    </g>
+    <text x="826" y="700" class="lbl2">🏖️ 상륙 해변</text>
+
+    <!-- 나침반 -->
+    <g transform="translate(1150,92)">
+      <circle r="30" fill="rgba(0,0,0,.4)" stroke="#6fd2ff" stroke-width="2" stroke-dasharray="5 5"/>
+      <polygon points="0,-22 8,8 0,2 -8,8" fill="#eaf4fc"/>
+      <text x="-5" y="46" class="lbl2" style="font-size:13px">N</text>
+    </g>
+  </svg>
+  </div>
+
+  <div class="side">
+    <div class="card">
+      <h3>📖 어떤 순서로 짓나 (5-7)</h3>
+      <ul>
+        <li><b>1일차 — 🏕️ 야영지</b>: 모래·풀 위 · 🌿나뭇가지 수준<br>
+          → “절벽 위는 못 짓는다: <b>재료도 도구도 없다</b>”</li>
+        <li><b>석기 — 🛖 해변·평지 오두막</b>: 돌 도끼·목재 확보 후</li>
+        <li><b>청동기 — 🏰 절벽 위 본거지</b>: 곡괭이 + <b>개척</b> 필요<br>
+          → 석조 계단 ⛰️20 · 60초 (또는 경사 통로 — 재료 ×1.5·시간 ×2)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>🪜 계단은 시설이다</h3>
+      <ul>
+        <li>계단·통로가 없으면 <b>쉘터 지정이 잠긴다</b> — “올라갈 길이 없다”</li>
+        <li>계단에도 HP — 파괴되면 <b>고립</b> → 보수 (13-5)</li>
+        <li>병정도 결국 계단으로 올라온다 = <b>내가 정한 병목</b></li>
+        <li>단, 🧗 기어오르기 병정은 계단을 무시하고 절벽을 탄다 (15-5)<br>→ <b>계단만 지키면 지는 이유</b> — 탑·함정을 절벽 위에도</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>🎨 아트 방침 (18-4 확장)</h3>
+      <ul>
+        <li>탑다운 유지 + <b>높낮이</b>: 절벽 단차(윗면+측면) · 계단 3/4 · 나무 캐노피 2~3겹 · 강은 물둑 단면</li>
+        <li>스프라이트는 <b>2D 합성</b> (8GB·모바일 — 실시간 3D 없음)</li>
+        <li>그림자로 낙차: 절벽·바위는 <b>키 큰 그림자</b></li>
+        <li>밤: 창불·모닥불 주황 광원 + 달빛</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="strip">
+  <div class="step">
+    <h4>① 1일차 — 모래 위 야영</h4>
+    <svg viewBox="0 0 340 190">
+      <rect x="0" y="0" width="340" height="190" fill="#1a527a"/>
+      <path d="M 0 96 q 30 -10 60 0 t 60 0 t 60 0 t 60 0 t 60 0 L 340 190 L 0 190 Z" fill="#e0cb98"/>
+      <path d="M 0 108 q 30 -10 60 0 t 60 0 t 60 0 t 60 0 t 60 0" stroke="#cbb075" stroke-width="3" fill="none"/>
+      <g transform="translate(150,120)">
+        <line x1="-20" y1="6" x2="0" y2="-26" stroke="#8a5a33" stroke-width="6" stroke-linecap="round"/>
+        <line x1="20" y1="6" x2="0" y2="-26" stroke="#8a5a33" stroke-width="6" stroke-linecap="round"/>
+        <polygon points="-26,-18 26,-24 0,-40" fill="#3f9b52"/>
+      </g>
+      <g fill="#8b8f95">
+        <circle cx="216" cy="128" r="5"/><circle cx="228" cy="136" r="5"/><circle cx="244" cy="138" r="5"/><circle cx="256" cy="130" r="5"/>
+      </g>
+      <path d="M 236 130 C 230 122, 242 120, 238 110" stroke="#ff8a3d" stroke-width="4" fill="none" stroke-linecap="round"/>
+      <g transform="translate(96,132)">
+        <ellipse cx="0" cy="10" rx="14" ry="5" fill="rgba(0,0,0,.3)"/>
+        <circle cx="0" cy="-8" r="8" fill="#f0c090"/>
+        <path d="M -10 4 q 10 -8 20 0 l 0 6 l -20 0 Z" fill="#3a6ea5"/>
+        <ellipse cx="0" cy="-14" rx="12" ry="3.5" fill="#d8b25a"/>
+      </g>
+    </svg>
+    <p>재료·도구 없음 → 해변 모래밭부터. 절벽 위는 아직 꿈도 못 꾼다.</p>
+  </div>
+  <div class="step">
+    <h4>② 석기 — 평지 오두막</h4>
+    <svg viewBox="0 0 340 190">
+      <rect x="0" y="0" width="340" height="190" fill="#1a527a"/>
+      <path d="M 0 88 q 30 -10 60 0 t 60 0 t 60 0 t 60 0 t 60 0 L 340 190 L 0 190 Z" fill="#4b8a53"/>
+      <g transform="translate(170,120)">
+        <polygon points="-30,0 30,0 30,-20 -30,-20" fill="#a9714b"/>
+        <rect x="-7" y="-16" width="13" height="16" rx="2" fill="#5d3b21"/>
+        <polygon points="-36,-20 36,-20 20,-44 -20,-44" fill="#d8b25a"/>
+      </g>
+      <g fill="#8a5a33">
+        <rect x="66" y="128" width="6" height="22" rx="2"/><rect x="86" y="132" width="6" height="22" rx="2"/><rect x="106" y="134" width="6" height="22" rx="2"/>
+      </g>
+      <g fill="#8b8f95"><circle cx="248" cy="130" r="5"/><circle cx="260" cy="138" r="5"/><circle cx="274" cy="136" r="5"/></g>
+      <path d="M 260 128 C 254 120, 266 118, 262 108" stroke="#ff8a3d" stroke-width="4" fill="none" stroke-linecap="round"/>
+      <text x="60" y="40" font-size="15" fill="#c8dcec">🪨 돌 도끼 확보 →</text>
+    </svg>
+    <p>도구와 목재가 생기면 평지·해변에 제대로 된 거점을 세운다.</p>
+  </div>
+  <div class="step">
+    <h4>③ 청동기 — 절벽 위 본거지</h4>
+    <svg viewBox="0 0 340 190">
+      <rect x="0" y="0" width="340" height="190" fill="#1a527a"/>
+      <path d="M 0 100 q 30 -10 60 0 t 60 0 t 60 0 t 60 0 t 60 0 L 340 190 L 0 190 Z" fill="#4b8a53"/>
+      <path d="M 30 96 L 210 96 C 250 96, 280 82, 300 62 L 300 118 C 270 140, 200 146, 150 130 L 30 130 Z" fill="#6f7378"/>
+      <path d="M 30 96 C 60 60, 130 44, 200 52 C 250 58, 285 74, 300 90 C 285 82, 250 70, 200 66 C 130 60, 70 72, 30 96 Z" fill="#9aa88f"/>
+      <path d="M 216 66 L 274 124 L 288 116 L 230 58 Z" fill="#8d949c"/>
+      <g stroke="#6f7378" stroke-width="2.5">
+        <line x1="220" y1="70" x2="234" y2="62"/><line x1="232" y1="82" x2="246" y2="74"/>
+        <line x1="244" y1="94" x2="258" y2="86"/><line x1="256" y1="106" x2="270" y2="98"/>
+      </g>
+      <g transform="translate(140,78)">
+        <polygon points="-24,0 24,0 24,-16 -24,-16" fill="#a9714b"/>
+        <rect x="-6" y="-13" width="11" height="13" rx="2" fill="#5d3b21"/>
+        <polygon points="-29,-16 29,-16 16,-34 -16,-34" fill="#d8b25a"/>
+      </g>
+      <line x1="76" y1="40" x2="76" y2="18" stroke="#5d3b21" stroke-width="3"/>
+      <polygon points="76,18 98,24 76,30" fill="#e05555"/>
+      <g fill="#8a5a33">
+        <rect x="182" y="70" width="5" height="16" rx="2"/><rect x="194" y="72" width="5" height="16" rx="2"/><rect x="206" y="74" width="5" height="16" rx="2"/>
+      </g>
+      <text x="46" y="164" font-size="14" fill="#c8dcec">개척: 석조 계단 ⛰️20 · 60초</text>
+    </svg>
+    <p>곡괭이로 계단을 깎아야 그제서야 절벽 위가 내 쉘터가 된다.</p>
+  </div>
+</div>
+
+<div class="legend">
+  <span class="chip">⛰️ 절벽 = 윗면+측면(단차) · 계단은 3/4뷰</span>
+  <span class="chip">🌲 숲 = 캐노피 2~3겹 · 🌊 강 = 물둑 단면 + 물결 하이라이트</span>
+  <span class="chip">🪜 개척: 석조 계단 / 경사 통로 / 나무다리 — 파괴·보수 대상 (13-5)</span>
+  <span class="chip">빨간 점선 = 병정이 올라오는 유일한 길(병목)</span>
+  <span class="chip">🔄 밀어서 뷰 바꾸기 — 좌우 = 회전 · 상하 = 줌 (전체 일괄 회전 검증 · 실게임 UI는 정립 고정 — 18-4⑤)</span>
+  <span class="chip">실제 구현: 2D 스프라이트 합성(탑다운+높낮이) — 18-4</span>
+</div>
+
+<script>
+const svgEl=document.querySelector('.mapbox svg');
+const boxEl=document.querySelector('.mapbox');
+const degEl=document.getElementById('rotDeg');
+const rotBtns=[...document.querySelectorAll('.rotbar button')];
+const RW=svgEl.offsetWidth, RH=svgEl.offsetHeight;
+let angle=0, zoom=1;
+let dragging=false, sx=0, sy=0, sAng=0, sZoom=1;
+const pointers=new Map();
+let pinchDist=0, pinchZoom=1;
+const ZOOM_MIN=1, ZOOM_MAX=2.3, DEG_PER_PX=0.45, ZOOM_PER_PX=0.005;
+function fitScale(a){
+  const rad=a*Math.PI/180;
+  const bw=Math.abs(RW*Math.cos(rad))+Math.abs(RH*Math.sin(rad));
+  const bh=Math.abs(RW*Math.sin(rad))+Math.abs(RH*Math.cos(rad));
+  const cw=boxEl.clientWidth-20, ch=RH;
+  return Math.min(1, cw/bw, ch/bh);
+}
+function render(){
+  svgEl.style.transformOrigin='center';
+  svgEl.style.transform=`rotate(${angle}deg) scale(${(fitScale(angle)*zoom).toFixed(3)})`;
+  const norm=((Math.round(angle)%360)+360)%360;
+  degEl.textContent=norm+'° · '+Math.round(zoom*100)+'%';
+  rotBtns.forEach(b=>b.classList.toggle('on', +b.dataset.a===norm));
+}
+function pointerDist(){
+  const [p1,p2]=[...pointers.values()];
+  return Math.hypot(p1.x-p2.x, p1.y-p2.y);
+}
+svgEl.addEventListener('pointerdown',e=>{
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  svgEl.setPointerCapture(e.pointerId);
+  if(pointers.size===1){                 // 한 손가락 = 밀어서 뷰 바꾸기
+    dragging=true; sx=e.clientX; sy=e.clientY; sAng=angle; sZoom=zoom;
+    boxEl.classList.add('grabbing');
+  }
+  if(pointers.size===2){                 // 두 손가락 = 핀치 줌
+    dragging=false; boxEl.classList.remove('grabbing');
+    pinchDist=pointerDist(); pinchZoom=zoom;
+  }
+});
+svgEl.addEventListener('pointermove',e=>{
+  if(!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pointers.size>=2){
+    const d=pointerDist();
+    if(pinchDist>0){
+      zoom=Math.min(ZOOM_MAX,Math.max(ZOOM_MIN, pinchZoom*(d/pinchDist)));
+      render();
+    }
+    return;
+  }
+  if(!dragging) return;
+  const dx=e.clientX-sx, dy=e.clientY-sy;
+  angle=sAng+dx*DEG_PER_PX;                                        // 옆으로 밀면 돌아간다
+  zoom=Math.min(ZOOM_MAX,Math.max(ZOOM_MIN, sZoom*(1+dy*ZOOM_PER_PX)));  // 아래로 당기면 가까이
+  render();
+});
+function endPointer(e){
+  pointers.delete(e.pointerId);
+  if(pointers.size<2) pinchDist=0;
+  if(pointers.size===0){ dragging=false; boxEl.classList.remove('grabbing'); }
+}
+svgEl.addEventListener('pointerup',endPointer);
+svgEl.addEventListener('pointercancel',endPointer);
+svgEl.addEventListener('wheel',e=>{
+  e.preventDefault();
+  zoom=Math.min(ZOOM_MAX,Math.max(ZOOM_MIN, zoom*(e.deltaY<0?1.08:0.926)));
+  render();
+},{passive:false});
+rotBtns.forEach(b=>b.addEventListener('click',()=>{ angle=+b.dataset.a; render(); }));
+render();
+</script>
+</body>
+</html>

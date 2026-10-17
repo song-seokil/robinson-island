@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>로빈슨 — 무텍스트 UI 보드 (17-7 · 17-8)</title>
+<style>
+  :root{ --bg:#0e1620; --panel:#1b2836; --line:#2e4056; --ink:#e8eef5; --dim:#93a4b8; --cyan:#67e4ff; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Malgun Gothic","Segoe UI",system-ui,sans-serif}
+  header{padding:26px 28px 4px}
+  h1{margin:0 0 6px;font-size:22px}
+  header p{margin:0;color:var(--dim);font-size:13px;line-height:1.55}
+  .wrap{padding:18px 28px 40px;display:flex;flex-direction:column;gap:20px}
+  .sect>h2{font-size:15px;margin:0 0 10px}
+  .card{background:linear-gradient(180deg,#1b2836,#16212e);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .meta{color:var(--dim);font-size:11.5px;margin-top:10px;line-height:1.55}
+  .meta b{color:#cfe3f5}
+
+  /* ---------- HUD ---------- */
+  .hud{position:relative;border-radius:14px;border:1px solid var(--line);overflow:hidden;
+       background:linear-gradient(180deg,#63a86b 0%,#4b8a53 55%,#3a7448 100%);
+       min-height:440px;padding:12px;display:flex;flex-direction:column;gap:10px}
+  .hud::after{content:"";position:absolute;inset:0;background:radial-gradient(80% 60% at 50% 40%,transparent 55%,rgba(0,0,0,.22));pointer-events:none}
+  .hud-top{display:flex;gap:10px;align-items:flex-start;z-index:1}
+  .bars{display:flex;flex-direction:column;gap:7px}
+  .bar{display:flex;align-items:center;gap:7px}
+  .bar .ic{font-size:16px;width:22px;text-align:center;filter:drop-shadow(0 1px 1px rgba(0,0,0,.5))}
+  .bar .track{width:236px;height:17px;background:rgba(14,22,32,.8);border:1px solid rgba(0,0,0,.4);border-radius:9px;overflow:hidden}
+  .bar .fill{height:100%;border-radius:8px}
+  .slots{display:flex;gap:7px;align-items:center;margin-top:2px}
+  .slot{display:flex;gap:6px;align-items:center;background:rgba(14,22,32,.8);border:1px solid rgba(103,228,255,.33);border-radius:8px;padding:4px 9px;font-size:13px}
+  .slot .mini{width:44px;height:6px;background:#22334a;border-radius:3px;overflow:hidden}
+  .slot .mini i{display:block;height:100%;background:var(--cyan)}
+  .slot.dim{opacity:.55;border-color:#3a4a5e}
+  .res{margin-left:auto;display:flex;gap:8px;align-items:center;z-index:1}
+  .chip{background:rgba(14,22,32,.8);border:1px solid rgba(103,228,255,.27);border-radius:9px;padding:5px 10px;font-size:13px;font-weight:600}
+  .hud-right{display:flex;flex-direction:column;gap:7px;align-items:flex-end;z-index:1}
+  .map{width:108px;height:78px;background:rgba(18,32,46,.85);border:1px solid rgba(103,228,255,.33);border-radius:9px;
+       display:flex;align-items:center;justify-content:center;font-size:17px;letter-spacing:5px;color:#cfe3f5}
+  .hud-bottom{position:absolute;left:14px;right:14px;bottom:14px;display:flex;justify-content:space-between;align-items:flex-end;z-index:1}
+  .joy{width:92px;height:92px;border-radius:50%;background:rgba(14,22,32,.45);border:2px dashed rgba(255,255,255,.4);
+       display:flex;align-items:center;justify-content:center;opacity:.8}
+  .joy i{width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.25);border:2px solid rgba(255,255,255,.45)}
+  .cluster{display:flex;flex-direction:column;gap:10px;align-items:flex-end}
+  .crow{display:flex;gap:10px;align-items:center}
+  .btn{border-radius:50%;display:flex;align-items:center;justify-content:center;
+       background:radial-gradient(circle at 35% 30%,#2c4159,#16212e);border:2px solid rgba(103,228,255,.4);
+       box-shadow:0 4px 10px rgba(0,0,0,.45)}
+  .b104{width:104px;height:104px;font-size:40px;border-color:rgba(103,228,255,.75);box-shadow:0 0 18px rgba(103,228,255,.25),0 4px 10px rgba(0,0,0,.45)}
+  .b76{width:76px;height:76px;font-size:32px}
+  .b60{width:60px;height:60px;font-size:24px}
+  .btn.small-em{font-size:26px}
+
+  /* ---------- 버튼 상태 3종 ---------- */
+  .states{display:flex;gap:34px;align-items:flex-end;flex-wrap:wrap}
+  .st{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .st .cap{font-size:11.5px;color:var(--dim)}
+  .btn.ok{border-color:var(--cyan);box-shadow:0 0 16px rgba(103,228,255,.35)}
+  .btn.lock{filter:grayscale(1);opacity:.6;border-color:#5f7185}
+  .btn.no{border-color:#e0555e;box-shadow:0 0 16px rgba(224,85,94,.3)}
+  .badge{position:absolute;transform:translate(26px,-26px);background:#0e1620;border:1px solid var(--line);
+         border-radius:9px;font-size:13px;padding:1px 6px}
+
+  /* ---------- 큐 ---------- */
+  .queue{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .qno{position:relative;width:66px;height:66px;border-radius:12px;background:rgba(14,22,32,.85);border:1px solid rgba(103,228,255,.33);
+       display:flex;align-items:center;justify-content:center;font-size:26px}
+  .qno .num{position:absolute;left:5px;top:3px;font-size:10px;color:var(--dim)}
+  .qno .x{position:absolute;right:-6px;top:-6px;width:18px;height:18px;border-radius:50%;background:#0e1620;border:1px solid var(--line);
+          font-size:10px;display:flex;align-items:center;justify-content:center;color:#cfe3f5}
+  .qno .warn{position:absolute;right:-6px;bottom:-6px;font-size:13px}
+  .qno .mini{position:absolute;left:8px;right:8px;bottom:6px;height:5px;background:#22334a;border-radius:3px;overflow:hidden}
+  .qno .mini i{display:block;height:100%;background:var(--cyan)}
+  .qno.empty{border-style:dashed;opacity:.5;font-size:20px}
+  .scenes{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  @media (max-width:1000px){.scenes{grid-template-columns:1fr}}
+  .scene{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px}
+  .scene svg{display:block;width:100%;height:auto;border-radius:9px}
+  .scene .cap{font-size:11.5px;color:var(--dim);margin-top:7px;text-align:center}
+  .rules li{font-size:12.5px;color:#cfe3f5;margin:5px 0;line-height:1.55}
+  .rules h2{margin:0 0 8px;font-size:14px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🎛️ 무텍스트 UI 보드 <span style="color:#93a4b8;font-size:13px">— GDD 17-7 · 17-8 · 아이콘이 말하게</span></h1>
+  <p>버튼은 아이콘만, 설명 문장 없음 — <b style="color:#cfe3f5">보기만 해도 바로 알 수 있어야</b> 한다.
+  HUD · 버튼 상태 3종 · 탭 위임 3단 · 작업 큐. (도식 목업 — 아이콘은 이모지 임시, 최종은 18-7 도안)</p>
+</header>
+<div class="wrap">
+
+  <!-- HUD -->
+  <div class="sect">
+    <h2>① HUD — 아이콘 + 숫자/게이지만</h2>
+    <div class="hud">
+      <div class="hud-top">
+        <div>
+          <div class="bars">
+            <div class="bar"><span class="ic">❤️</span><span class="track"><span class="fill" style="width:82%;background:#e0555e"></span></span></div>
+            <div class="bar"><span class="ic">🍖</span><span class="track"><span class="fill" style="width:64%;background:#f2a03d"></span></span></div>
+            <div class="bar"><span class="ic">🧣</span><span class="track"><span class="fill" style="width:45%;background:#7ed0e8"></span></span></div>
+          </div>
+          <div class="slots">
+            <span class="slot">📖 <span class="mini"><i style="width:60%"></i></span></span>
+            <span class="slot">🧰 <span class="mini"><i style="width:30%"></i></span></span>
+            <span class="slot dim">🍲 <span class="mini"><i style="width:0%"></i></span></span>
+            <span class="slot">💎</span>
+          </div>
+        </div>
+        <div class="res">
+          <span class="chip">🌳 12</span>
+          <span class="chip">⛰️ 7</span>
+          <span class="chip">🔶 5</span>
+          <span class="chip">🔸 3</span>
+          <span class="chip">🛢️ 2</span>
+        </div>
+        <div class="hud-right">
+          <span class="chip">💎 2</span>
+          <span class="chip">📺 2/5</span>
+          <div class="map">🏕️💎📍</div>
+          <span class="chip">🗑️ 12%</span>
+        </div>
+      </div>
+      <div class="hud-bottom">
+        <div class="joy"><i></i></div>
+        <div class="cluster">
+          <div class="crow">
+            <div class="btn b60">🍖</div>
+            <div class="btn b60">🎣</div>
+            <div class="btn b60">📌</div>
+          </div>
+          <div class="crow">
+            <div class="btn b76">🧰</div>
+            <div class="btn b76">🔨</div>
+            <div class="btn b76">🏴‍☠️</div>
+          </div>
+          <div class="crow">
+            <div class="btn b104">⚔️</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="meta"><b>HUD 규칙</b>: 바 3개(❤️🍖🧣) · 슬롯(📖🧰🍲 + 💎) · 자원 5칩(🌳⛰️🔶🔸🛢️) + 💎 특별 재화 · 📺 2/5 · 미니맵 · 우하단 행동 버튼 위계(주 104 → 보조 76 → 유틸 60) · 좌하단 조이스틱은 <b>선택</b> — 기본 조작은 탭 위임(17-8)</div>
+  </div>
+
+  <!-- 버튼 상태 -->
+  <div class="sect">
+    <h2>② 버튼 상태 3종 — 색 + 모양으로 읽는다</h2>
+    <div class="card">
+      <div class="states">
+        <div class="st"><div class="btn b76 ok" style="position:relative">🧰</div><span class="cap">가능 — 청록 글로우</span></div>
+        <div class="st"><div class="btn b76 lock" style="position:relative">🧰<span class="badge">🔒</span></div><span class="cap">잠김 — 회색 + 🔒</span></div>
+        <div class="st"><div class="btn b76 no" style="position:relative">🧰<span class="badge" style="border-color:#e0555e">−🌳</span></div><span class="cap">불가(재료 부족) — 빨강 + 부족 아이콘</span></div>
+      </div>
+      <div class="meta">같은 🧰 아이콘이라도 <b>색+배지</b>만으로 상태가 읽힌다 — 텍스트 없음 · 색맹 대비 위해 🔒·−🌳 같은 모양 배지를 병행 (17-7)</div>
+    </div>
+  </div>
+
+  <!-- 탭 위임 3단 -->
+  <div class="sect">
+    <h2>③ 탭 위임 3단 — 노드를 누르면 알아서 (17-8)</h2>
+    <div class="scenes">
+      <div class="scene">
+        <svg viewBox="0 0 300 170" role="img" aria-label="노드 탭">
+          <rect x="0" y="0" width="300" height="170" rx="10" fill="#4b8a53"/>
+          <ellipse cx="150" cy="132" rx="120" ry="26" fill="#3a7448" opacity=".55"/>
+          <rect x="196" y="86" width="8" height="36" rx="2" fill="#8a5a33"/>
+          <circle cx="200" cy="72" r="20" fill="#3a7448"/><circle cx="188" cy="79" r="13" fill="#4b8a53"/>
+          <circle cx="213" cy="79" r="13" fill="#4b8a53"/><circle cx="200" cy="61" r="12" fill="#5c9c62"/>
+          <circle cx="200" cy="122" r="10" fill="none" stroke="#67e4ff" stroke-width="2.5" opacity=".95"/>
+          <circle cx="200" cy="122" r="18" fill="none" stroke="#67e4ff" stroke-width="2" opacity=".5"/>
+          <circle cx="200" cy="122" r="4" fill="#67e4ff"/>
+          <circle cx="24" cy="24" r="13" fill="#0e1620" opacity=".85"/><text x="24" y="29" text-anchor="middle" font-size="14" fill="#cfe3f5">1</text>
+        </svg>
+        <div class="cap">노드 탭 → 리플 + 로빈슨 출발</div>
+      </div>
+      <div class="scene">
+        <svg viewBox="0 0 300 170" role="img" aria-label="이동과 채집">
+          <rect x="0" y="0" width="300" height="170" rx="10" fill="#4b8a53"/>
+          <ellipse cx="150" cy="132" rx="120" ry="26" fill="#3a7448" opacity=".55"/>
+          <rect x="86" y="84" width="8" height="38" rx="2" fill="#8a5a33"/>
+          <circle cx="90" cy="70" r="20" fill="#3a7448"/><circle cx="78" cy="77" r="13" fill="#4b8a53"/>
+          <circle cx="103" cy="77" r="13" fill="#4b8a53"/><circle cx="90" cy="59" r="12" fill="#5c9c62"/>
+          <circle cx="90" cy="122" r="22" fill="none" stroke="#22334a" stroke-width="6"/>
+          <circle cx="90" cy="122" r="22" fill="none" stroke="#67e4ff" stroke-width="6"
+                  stroke-dasharray="90 48" stroke-linecap="round" transform="rotate(-90 90 122)"/>
+          <g transform="translate(176,96)">
+            <ellipse cx="0" cy="44" rx="14" ry="4" fill="#000" opacity=".2"/>
+            <rect x="-8" y="16" width="16" height="22" rx="4" fill="#c2703f"/>
+            <rect x="-6" y="36" width="5" height="10" rx="2" fill="#7a5a3a"/>
+            <rect x="1" y="36" width="5" height="10" rx="2" fill="#7a5a3a"/>
+            <circle cx="0" cy="6" r="9" fill="#e8b48c"/>
+            <path d="M-9,4 Q0,-8 9,4 L9,7 L-9,7 Z" fill="#5d3b21"/>
+            <rect x="-18" y="16" width="10" height="4" rx="2" fill="#8a5a33" transform="rotate(-35 -13 18)"/>
+          </g>
+          <circle cx="24" cy="24" r="13" fill="#0e1620" opacity=".85"/><text x="24" y="29" text-anchor="middle" font-size="14" fill="#cfe3f5">2</text>
+        </svg>
+        <div class="cap">이동·채집 — 노드에 진행 링</div>
+      </div>
+      <div class="scene">
+        <svg viewBox="0 0 300 170" role="img" aria-label="복귀와 보관">
+          <rect x="0" y="0" width="300" height="170" rx="10" fill="#4b8a53"/>
+          <ellipse cx="150" cy="132" rx="120" ry="26" fill="#3a7448" opacity=".55"/>
+          <rect x="38" y="84" width="52" height="34" rx="3" fill="#c9a06a"/>
+          <path d="M30,86 L64,54 L98,86 Z" fill="#8a5a33"/>
+          <rect x="56" y="98" width="14" height="20" rx="2" fill="#5d3b21"/>
+          <rect x="128" y="96" width="38" height="26" rx="3" fill="#8a5a33"/>
+          <rect x="128" y="96" width="38" height="8" rx="3" fill="#5d3b21"/>
+          <rect x="144" y="104" width="6" height="6" rx="1" fill="#f2d06b"/>
+          <text x="104" y="74" font-size="15" font-weight="700" fill="#ffe9a8">+3 🌳</text>
+          <g transform="translate(206,96)">
+            <ellipse cx="0" cy="44" rx="14" ry="4" fill="#000" opacity=".2"/>
+            <rect x="-8" y="16" width="16" height="22" rx="4" fill="#c2703f"/>
+            <rect x="-6" y="36" width="5" height="10" rx="2" fill="#7a5a3a"/>
+            <rect x="1" y="36" width="5" height="10" rx="2" fill="#7a5a3a"/>
+            <circle cx="0" cy="6" r="9" fill="#e8b48c"/>
+            <path d="M-9,4 Q0,-8 9,4 L9,7 L-9,7 Z" fill="#5d3b21"/>
+          </g>
+          <circle cx="24" cy="24" r="13" fill="#0e1620" opacity=".85"/><text x="24" y="29" text-anchor="middle" font-size="14" fill="#cfe3f5">3</text>
+        </svg>
+        <div class="cap">복귀 → 창고 자동 보관 (+3 🌳 떠오름)</div>
+      </div>
+    </div>
+    <div class="meta">연속 탭으로 작업을 쌓는다 — <b>최대 5개</b> · 노드 고갈까지 반복 · 창고가 없으면 쉘터 바닥에 내려놓는다 · 부엌 탭 = 요리 시작 · 모닥불 탭 = 구이 (17-8)</div>
+  </div>
+
+  <!-- 작업 큐 -->
+  <div class="sect">
+    <h2>④ 작업 큐 — 아이콘 + 번호, ✕ 탭 = 취소</h2>
+    <div class="card">
+      <div class="queue">
+        <div class="qno">🌳<span class="num">1</span><span class="x">✕</span><span class="mini"><i style="width:55%"></i></span></div>
+        <div class="qno">⛰️<span class="num">2</span><span class="x">✕</span></div>
+        <div class="qno">🍖<span class="num">3</span><span class="x">✕</span><span class="warn">⚠️</span></div>
+        <div class="qno">🌳<span class="num">4</span><span class="x">✕</span></div>
+        <div class="qno empty">＋</div>
+      </div>
+      <div class="meta">⚠️ = 방해를 받아 취소됨 (17-8) · 진행 중 작업은 미니 게이지 · 큐도 아이콘만 — 텍스트 없음</div>
+    </div>
+  </div>
+
+  <!-- 규칙 -->
+  <div class="card rules">
+    <h2>📌 이 보드가 지키는 규칙 (17-7 · 17-8)</h2>
+    <ul>
+      <li><b>3초 룰</b> — 화면을 3초 봐서 다음 행동이 안 보이면, 텍스트 추가가 아니라 아이콘·연출을 고친다</li>
+      <li><b>1~2탭 룰</b> — 먹기·제작·수면·약탈은 어디서든 1~2탭 · 핵심은 <b>사물을 직접 탭</b>하는 것</li>
+      <li><b>한 화면 한 결정</b> — 동시 선택 1개, 나머지는 회색 잠김</li>
+      <li><b>색+모양</b> — 청록=가능 / 회색=잠김 / 빨강=불가·위험 / 노랑=보상 (배지로 색맹 대비)</li>
+      <li><b>아이콘 = 실물 도안</b> — 버튼의 돌 도끼는 필드의 돌 도끼와 같은 그림 (18-7)</li>
+      <li><b>텍스트는 온보딩에서만</b> — 첫 10분(2-2)에서 아이콘 문해력을 가르친다</li>
+    </ul>
+    <div class="meta" style="margin-top:10px">※ 도식 목업 — 실제 게임 화면 아님 · 조합 섬은 <b>design/example_island_iso.html</b>, 바이옴 팔레트는 <b>design/biome_board.html</b></div>
+  </div>
+
+</div>
+</body>
+</html>

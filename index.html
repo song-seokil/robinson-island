@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0b1a2b" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>무인도 생존기 — Robinson Island</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #06131f;
+        color: #cfe3f7;
+        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Malgun Gothic', sans-serif;
+        -webkit-tap-highlight-color: transparent;
+        -webkit-user-select: none;
+        user-select: none;
+        touch-action: none;
+        overscroll-behavior: none;
+      }
+      #app {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #app canvas { display: block; }
+
+      /* 세로 모드 안내 (게임은 가로 기준) */
+      #rotate-hint {
+        position: absolute;
+        inset: 0;
+        display: none;
+        z-index: 50;
+        background: #06131f;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 14px;
+        text-align: center;
+        padding: 24px;
+      }
+      #rotate-hint .icon { font-size: 54px; animation: spin 2.2s ease-in-out infinite; }
+      #rotate-hint .t { font-size: 17px; font-weight: 700; }
+      #rotate-hint .s { font-size: 13px; opacity: 0.65; line-height: 1.6; }
+      @keyframes spin {
+        0%   { transform: rotate(0deg); }
+        55%  { transform: rotate(90deg); }
+        100% { transform: rotate(90deg); }
+      }
+      @media (orientation: portrait) and (max-width: 900px) {
+        #rotate-hint { display: flex; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="rotate-hint">
+      <div class="icon">📱</div>
+      <div class="t">기기를 가로로 돌려주세요</div>
+      <div class="s">무인도 생존기는 화면이 넓은 가로 모드에 최적화되어 있습니다.</div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

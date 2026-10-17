@@ -1,0 +1,21 @@
+# 의존성 / 빌드 산출물
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# vite 캐시
+.vite/
+
+# 에셋 파이프라인 중간 산출물 (원본은 tools/blender 에서 재생성)
+tools/blender/_bundle.cjs
+tools/blender/out/
+*.log
+
+# 에디터 / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+install.log

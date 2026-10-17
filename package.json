@@ -1,0 +1,25 @@
+{
+  "name": "robinson-island",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Robinson Crusoe style 2D island survival / crafting / raid-defense game (Android + iOS via Capacitor)",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host",
+    "typecheck": "tsc --noEmit",
+    "android:add": "cap add android",
+    "android:sync": "npm run build && cap sync android",
+    "android:open": "cap open android",
+    "ios:add": "cap add ios",
+    "ios:sync": "npm run build && cap sync ios"
+  },
+  "dependencies": {
+    "phaser": "^3.80.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vite": "^5.4.0"
+  }
+}
