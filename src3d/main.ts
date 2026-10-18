@@ -155,8 +155,16 @@ function cocify(roots: THREE.Object3D[], ink = 0.016) {
       // 툰 재질로 교체 (색은 원래 재질에서 유지)
       const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       const toon = mats.map((m) => {
-        const base = (m as THREE.MeshStandardMaterial).color ?? new THREE.Color(0xcccccc);
-        return new THREE.MeshToonMaterial({ color: base, gradientMap: GRAD });
+        const sm = m as THREE.MeshStandardMaterial;
+        const base = sm.color ?? new THREE.Color(0xcccccc);
+        const hasMap = !!sm.map;
+        return new THREE.MeshToonMaterial({
+          color: base,
+          gradientMap: GRAD,
+          map: sm.map ?? null,          // 텍스처(그림 투영) 유지
+          alphaTest: hasMap ? 0.35 : 0,
+          transparent: hasMap ? false : sm.transparent,
+        });
       });
       mesh.material = Array.isArray(mesh.material) ? toon : toon[0];
       mesh.castShadow = true;

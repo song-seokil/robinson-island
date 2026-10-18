@@ -209,6 +209,65 @@ bpy.ops.object.join()
 body = bpy.context.object
 body.name = 'Robinson'
 
+# ---------------------------------------------------------------- 텍스처 투영 (A안)
+#  2번 이미지를 정면(살짝 비스듬한) 방향에서 그대로 입힌다 — 손화풍 유지
+TEX = os.environ.get('B3D_TEX', '')
+TEX_ANGLE = float(os.environ.get('B3D_TEX_ANGLE', '22'))     # 이미지가 3/4 뷰라서
+if TEX and os.path.exists(TEX):
+    import numpy as np
+    img = bpy.data.images.load(TEX)
+    iw, ih = img.size
+    px = np.array(img.pixels[:], dtype=np.float32).reshape(ih * iw, 4)
+    a = px[:, 3] > 0.5
+    if a.any():
+        cols = np.nonzero(a)[0] % iw
+        rows = np.nonzero(a)[0] // iw
+        u0, u1 = cols.min() / iw, (cols.max() + 1) / iw
+        v0, v1 = rows.min() / ih, (rows.max() + 1) / ih
+
+    ang = math.radians(TEX_ANGLE)
+    rx, ry = math.cos(ang), math.sin(ang)                    # 화면 우측 축
+    cx, cy = -math.sin(ang), math.cos(ang)                   # 카메라 방향(-Y 쪽)
+    me = body.data
+    us = [v.co.x * rx + v.co.y * ry for v in me.vertices]
+    ws = [v.co.z for v in me.vertices]
+    su0, su1, sw0, sw1 = min(us), max(us), min(ws), max(ws)
+    du = (su1 - su0) or 1.0
+    dw = (sw1 - sw0) or 1.0
+    uvl = me.uv_layers.new(name='UVMap')
+    for poly in me.polygons:
+        for li in poly.loop_indices:
+            co = me.vertices[me.loops[li].vertex_index].co
+            uu = (co.x * rx + co.y * ry - su0) / du
+            ww = (co.z - sw0) / dw
+            uvl.data[li].uv = (u0 + uu * (u1 - u0), v0 + ww * (v1 - v0))
+
+    tm = bpy.data.materials.new('tex_body')
+    tm.use_nodes = True
+    nt = tm.node_tree
+    bsdf = nt.nodes.get('Principled BSDF')
+    tn = nt.nodes.new('ShaderNodeTexImage')
+    tn.image = img
+    tn.interpolation = 'Cubic'
+    nt.links.new(tn.outputs['Color'], bsdf.inputs['Base Color'])
+    nt.links.new(tn.outputs['Alpha'], bsdf.inputs['Alpha'])
+    try:
+        tm.blend_method = 'BLEND'
+    except Exception:
+        pass
+    tm.use_backface_culling = False
+
+    # 기존 재질 슬롯은 유지(장비 강체 고정용) — 앞쪽만 텍스처로 덮는다
+    tex_slot = len(me.materials)
+    me.materials.append(tm)
+    for poly in me.polygons:
+        n = poly.normal
+        if n.x * cx + n.y * cy > 0.30:
+            poly.material_index = tex_slot     # 카메라를 향한 면만 그림
+    print('[char] tex applied %s  uv=[%.3f..%.3f, %.3f..%.3f]' % (os.path.basename(TEX), u0, u1, v0, v1))
+else:
+    print('[char] no texture (B3D_TEX unset)')
+
 # ---------------------------------------------------------------- rig
 arm_data = bpy.data.armatures.new('rig')
 rig = bpy.data.objects.new('rig', arm_data)
