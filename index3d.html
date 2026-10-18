@@ -34,8 +34,10 @@
       }
       #buildmenu { left: 12px; }
       #bookmenu  { right: 12px; }
+      #delmenu   { left: 76px; }
       #buildmenu.on { border-color: #7CFC9A; background: rgba(20,70,45,.9); }
       #bookmenu.on  { border-color: #ffd76a; background: rgba(70,55,15,.9); }
+      #delmenu.on   { border-color: #ff6b6b; background: rgba(90,25,25,.92); }
 
       /* ---- 패널 공통 (건설 목록 / 스킬북) ---- */
       .panel {
@@ -126,7 +128,8 @@
       #book .sk .bar i { display: block; height: 100%; background: #7CFC9A; }
 
       #tip {
-        position: fixed; right: 12px; bottom: 18px; color: #dff0ff; opacity: .55;
+        position: fixed; left: 50%; transform: translateX(-50%); top: 12px;
+        color: #dff0ff; opacity: .5; text-align: center;
         font: 11px/1.4 system-ui, "Malgun Gothic", sans-serif; pointer-events: none;
       }
     </style>
@@ -135,10 +138,11 @@
     <div id="hud">로빈슨의 섬 · 3D</div>
     <div id="inv"></div>
     <button id="buildmenu" class="fab">🏗</button>
+    <button id="delmenu" class="fab">🗑</button>
     <button id="bookmenu" class="fab">📘</button>
     <div id="bpanel" class="panel"></div>
     <div id="book" class="panel"></div>
-    <div id="tip">노드 클릭 = 채집 지시 · 건물 클릭 = 철거<br>크루조가 알아서 이동합니다</div>
+    <div id="tip">노드 클릭 = 채집 지시 · 🏗 = 세울 것 고르기 · 🗑 = 철거 모드<br>크루조가 알아서 이동합니다</div>
     <script type="module" src="/src3d/main.ts"></script>
   </body>
 </html>

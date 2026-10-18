@@ -842,22 +842,7 @@ function finishTask(t: Task) {
   npc.pi = 0;
 }
 
-/** 지우개: 건설된 건물 회수 (50% 반환) */
-function demolishAt(wx: number, wz: number) {
-  for (let i = built.length - 1; i >= 0; i--) {
-    const b = built[i];
-    if (Math.abs(b.x - wx) < 1.2 && Math.abs(b.z - wz) < 1.2) {
-      const def = BUILDS.find((x) => x.kind === b.kind);
-      if (def) for (const k of Object.keys(def.cost) as ItemKey[]) inv[k] += Math.floor((def.cost[k] ?? 0) * 0.5);
-      scene.remove(b.obj);
-      built.splice(i, 1);
-      saveGame(); paintHUD(); paintBuildPanel();
-      status.textContent = '철거 (재료 50%)';
-      return true;
-    }
-  }
-  return false;
-}
+/** 철거 모드는 click 핸들러가 hitBuilding()/removeBuilding() 로 처리한다 (18-23) */
 
 /** 클릭: 노드면 채집 지시 / 건물이면 철거 / 빈 땅이면(건설모드) 건설 지시 */
 renderer.domElement.addEventListener('click', (ev) => {
@@ -884,10 +869,21 @@ renderer.domElement.addEventListener('click', (ev) => {
       paintHUD();
       return;
     }
-    orderReason = chk.why;                 // 클릭이 실패하면 노드 → 철거 순으로 더 시도
+    orderReason = chk.why;                 // 클릭이 실패하면 노드 폴백으로 넘어간다
   }
 
-  // 1) 직접 레이캐스트 — 클릭이 정확히 meshes 를 때릴 때
+  // 0-1) 🗑 철거 모드 — 노드보다 먼저. 이 모드에서만 건물이 지워진다 (18-23)
+  if (demolishMode) {
+    const b = hitBuilding(rc, r, ev);
+    if (b) {
+      removeBuilding(b);
+    } else {
+      status.textContent = '철거할 건물을 눌러라';
+    }
+    return;
+  }
+
+  // 1) 직접 레이케이캐스트 — 클릭이 정확히 meshes 를 때릴 때
   let hitNode: (typeof propNodes)[number] | null = null;
   for (const n of propNodes) {
     if (!n.obj.visible) continue;
@@ -909,14 +905,43 @@ renderer.domElement.addEventListener('click', (ev) => {
   }
   if (hitNode) { orderHarvest(hitNode); return; }
 
-  // 3) 빈 땅 → 건설 지시 / 건물 → 철거
-  if (!p) return;
-  if (demolishAt(wx, wz)) return;
+  // 3) 빈 땅 — 건설 모드면 사유를 알린다
   if (buildIdx >= 0) {
     status.textContent = `여기론 못 지음 — ${orderReason || '안 됨'}`;
   }
 });
 let orderReason = '';
+
+/** 레이캐스트 + 화면 근처 폴백으로 클릭한 건물을 찾는다 (철거 모드 전용) */
+function hitBuilding(rc: THREE.Raycaster, r: DOMRect, ev: PointerEvent) {
+  for (const b of built) {
+    if (rc.intersectObject(b.obj, true).length) return b;
+  }
+  let best = null as (typeof built)[number] | null;
+  let bestPx = 40 * 40;
+  const v = new THREE.Vector3();
+  for (const b of built) {
+    v.set(b.x, (b.obj.position.y ?? 0) + 0.4, b.z).project(camera);
+    if (v.z > 1) continue;
+    const px = (v.x * 0.5 + 0.5) * r.width - (ev.clientX - r.left);
+    const py = (-v.y * 0.5 + 0.5) * r.height - (ev.clientY - r.top);
+    const d2 = px * px + py * py;
+    if (d2 < bestPx) { bestPx = d2; best = b; }
+  }
+  return best;
+}
+
+/** 건물 하나 철거 — 재료 50% 반환 (18-23) */
+function removeBuilding(b: (typeof built)[number]) {
+  const i = built.indexOf(b);
+  if (i < 0) return;
+  const def = BUILDS.find((x) => x.kind === b.kind);
+  if (def) for (const k of Object.keys(def.cost) as ItemKey[]) inv[k] += Math.floor((def.cost[k] ?? 0) * 0.5);
+  scene.remove(b.obj);
+  built.splice(i, 1);
+  saveGame(); paintHUD(); paintBuildPanel();
+  status.textContent = `${def?.icon ?? ''} ${def?.name ?? ''} 철거 (재료 50% 돌려받음)`;
+}
 
 // ---------- 건설 (BUILD) ----------
 interface BuildDef {
@@ -1027,7 +1052,7 @@ function paintBook() {
 }
 document.getElementById('bookmenu')?.addEventListener('click', () => {
   bookOpen = !bookOpen;
-  if (bookOpen) closeBuildPanel();
+  if (bookOpen) { closeBuildPanel(); setDemolish(false); }
   paintBook();
 });
 BOOK?.addEventListener('click', (e) => {
@@ -1082,6 +1107,7 @@ document.getElementById('buildmenu')?.addEventListener('click', () => {
   const open = BPANEL?.classList.contains('show');
   if (open) { closeBuildPanel(); return; }
   bookOpen = false; paintBook();
+  setDemolish(false);
   BPANEL?.classList.add('show');
   document.getElementById('buildmenu')?.classList.add('on');
   paintBuildPanel();
@@ -1096,6 +1122,21 @@ BPANEL?.addEventListener('click', (e) => {
   buildIdx = BUILDS.indexOf(def);       // 패널을 닫은 뒤에 지정 (닫을 때 초기화됨)
   status.textContent = `${def.name} — 맵을 눌러 지시`;
 });
+// ---- 철거 모드 (18-23): 실수로 지우지 못하게 명시적 모드 ----
+let demolishMode = false;
+function setDemolish(on: boolean) {
+  demolishMode = on;
+  document.getElementById('delmenu')?.classList.toggle('on', on);
+  if (on) { closeBuildPanel(); bookOpen = false; paintBook(); }
+  if (!on) status.textContent = '철거 모드 해제';
+  else status.textContent = '철거 모드 — 지울 건물을 눌러라';
+}
+document.getElementById('delmenu')?.addEventListener('click', () => {
+  if (demolishMode) { setDemolish(false); return; }
+  if (!built.length) { status.textContent = '지울 건물이 없다'; return; }
+  setDemolish(true);
+});
+
 let buildIdx = -1;                       // -1 = 건설 모드 아님
 const ghost = new THREE.Mesh(
   new THREE.BoxGeometry(1, 0.1, 1),
