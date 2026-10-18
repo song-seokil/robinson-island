@@ -73,6 +73,19 @@ export const PASS = {
 } as const;
 export type PassSize = (typeof PASS)[keyof typeof PASS];
 
+/**
+ * 섬 크기 규약 (18-14) — "무작정 큰 섬" 금지, 전 유저에게 같은 공간.
+ *   육지(건설 가능지)  LAND = 1000 타일 (±5%)  ← 강제 정규화
+ *   2×2 평평면        FLAT = 600 타일 (상한 가이드)
+ *   대형 통과 가능면  RIG  = 500 타일 (상한 가이드)
+ * 육지는 강제하되, 평평면·통행면은 바이옴 구조상 결정적이라 자연스럽게 ±10% 안.
+ */
+export const ISLAND_SIZE = {
+  LAND: 857,      // 이분탐색 기준값 (실 육지 ≈ 1000타일, 편차 ±5%)
+  FLAT: 600,
+  RIG: 500,
+} as const;
+
 export function generateIsland(seed: number): IslandData {
   const rng = new RNG(seed ^ 0x9e3779b9);
   const elev = new ValueNoise(seed >>> 0, 16);
@@ -82,6 +95,7 @@ export function generateIsland(seed: number): IslandData {
   const tiles = new Uint8Array(MAP_TILES * MAP_TILES);
   const shapeF = new Float32Array(MAP_TILES * MAP_TILES);
   const moistF = new Float32Array(MAP_TILES * MAP_TILES);
+  const blobF = new Float32Array(MAP_TILES * MAP_TILES);   // 블롭 거리값 (바위 판정용)
   const cx = MAP_TILES / 2, cy = MAP_TILES / 2;
 
   // 섬 특성 — 섬마다 자원 풍요도가 다르다
@@ -127,6 +141,7 @@ export function generateIsland(seed: number): IslandData {
   }
 
   // ---- 섬 실루엣: 큰 덩어리(블롭) 3~5개 합집합 → "읽히는" 섬 모양 (얼룩덜룩 X) ----
+  //  · 크기는 시드와 무관하게 항상 같다(18-14) — 전 유저에게 같은 공간을 준다
   const lobes: { x: number; y: number; r: number }[] = [];
   lobes.push({ x: cx + rng.range(-2.5, 2.5), y: cy + rng.range(-2.5, 2.5), r: rng.range(16, 19) });
   const lobeN = 2 + rng.int(0, 2);
@@ -156,16 +171,24 @@ export function generateIsland(seed: number): IslandData {
 
       shapeF[idx(x, y)] = shape;
       moistF[idx(x, y)] = mo;
+      blobF[idx(x, y)] = m;
+    }
+  }
 
+  // 타일 확정
+  for (let y = 0; y < MAP_TILES; y++) {
+    for (let x = 0; x < MAP_TILES; x++) {
+      const i = idx(x, y);
+      const shape = shapeF[i], mo = moistF[i], mb = blobF[i];
       let t: number;
       if (shape < 0.30) t = T.WATER_DEEP;
       else if (shape < 0.40) t = T.WATER;
       else if (shape < 0.455) t = T.SAND_WET;
       else if (shape < 0.52) t = T.SAND;
-      else if (shape > rockThresh && m > rockMoist) t = T.ROCK;
-      else if (m > 0.58) t = T.JUNGLE;
+      else if (shape > rockThresh && mb > rockMoist) t = T.ROCK;
+      else if (mo > 0.58) t = T.JUNGLE;
       else t = T.GRASS;
-      tiles[idx(x, y)] = t;
+      tiles[i] = t;
     }
   }
 
@@ -236,7 +259,50 @@ let hasRiver = false;
       }
     }
   }
-}
+  }
+
+  // ---- 섬 크기 정규화 (18-14) ----
+  //  강이 깎은 면까지 포함해 '물 아닌 타일' = ISLAND_SIZE.LAND 로 항상 맞춘다.
+  //  방법: 해수면 기준값 τ 를 이분 탐색해서 찾은 뒤 shape 필드를 그만큼 평행 이동.
+  //        (모래밭 지형에선 반지름 스케일이 잘 안 먹으므로 오프셋이 확실)
+  {
+    const countAt = (tau: number) => {
+      let n = 0;
+      for (let i = 0; i < shapeF.length; i++) {
+        if (riverDepth[i] === 1) continue;             // 강물은 육지 아님
+        if (shapeF[i] >= tau) n++;
+      }
+      return n;
+    };
+    let lo = 0.32, hi = 0.62;
+    for (let it = 0; it < 16; it++) {
+      const mid = (lo + hi) / 2;
+      if (countAt(mid) > ISLAND_SIZE.LAND) lo = mid; else hi = mid;
+    }
+    const tau = (lo + hi) / 2;
+    // shape' = shape + (0.455 - tau)  ⟹  shape' >= 0.455  ⟺  shape >= tau
+    const shift = 0.455 - tau;
+    if (Math.abs(shift) > 1e-4) {
+      for (let i = 0; i < shapeF.length; i++) shapeF[i] += shift;
+      // 타일 재계산 (강은 riverDepth 로 보존)
+      for (let y = 0; y < MAP_TILES; y++) {
+        for (let x = 0; x < MAP_TILES; x++) {
+          const i = idx(x, y);
+          if (riverDepth[i] > 0) continue;
+          const shape = shapeF[i], mo = moistF[i], mb = blobF[i];
+          let t: number;
+          if (shape < 0.30) t = T.WATER_DEEP;
+          else if (shape < 0.40) t = T.WATER;
+          else if (shape < 0.455) t = T.SAND_WET;
+          else if (shape < 0.52) t = T.SAND;
+          else if (shape > rockThresh && mb > rockMoist) t = T.ROCK;
+          else if (mo > 0.58) t = T.JUNGLE;
+          else t = T.GRASS;
+          tiles[i] = t;
+        }
+      }
+    }
+  }
 // ============================================================
   // 2.7) 지형 고도 · 계간 · 경사 — "3/4 뷰에서 실제로 오르내리는 지형"
   //  · 단위: 타일(1 = 32px). 물 아래는 음수.
