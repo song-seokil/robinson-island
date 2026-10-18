@@ -53,10 +53,41 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.minDistance = 2.5;
 controls.maxDistance = 190;
-controls.maxPolarAngle = Math.PI * 0.49;      // 지면 아래로 못 내려감
-controls.minPolarAngle = Math.PI * 0.08;
+// ---- 360° 자유 회전: 지면 아래로만 못 내려감 (0° = 정수평, 90° = 수평)
+controls.maxPolarAngle = Math.PI * 0.495;
+controls.minPolarAngle = 0.0;
 controls.enablePan = true;
 controls.screenSpacePanning = false;
+controls.rotateSpeed = 0.85;
+controls.zoomSpeed = 0.9;
+
+// ---- 45° 단위 스냅 토글 (버튼) — 게임용 시점 프리셋
+const VIEW_PRESETS = [
+  { name: '3/4 감람', polar: Math.PI * 0.28, azim: Math.PI * 0.25, dist: 70 },
+  { name: '정면 3/4', polar: Math.PI * 0.33, azim: Math.PI * 0.50, dist: 70 },
+  { name: '측면', polar: Math.PI * 0.32, azim: Math.PI * 0.75, dist: 68 },
+  { name: '뒤 3/4', polar: Math.PI * 0.30, azim: Math.PI * 1.00, dist: 70 },
+  { name: '수평(전망)', polar: Math.PI * 0.06, azim: Math.PI * 0.25, dist: 84 },
+];
+let presetIdx = -1;
+function applyPreset(i: number) {
+  const p = VIEW_PRESETS[(i + VIEW_PRESETS.length) % VIEW_PRESETS.length];
+  presetIdx = (i + VIEW_PRESETS.length) % VIEW_PRESETS.length;
+  const t = new THREE.Vector3(CX, 0, CZ);
+  const off = new THREE.Vector3(
+    Math.sin(p.azim) * Math.cos(p.polar),
+    Math.sin(p.polar),
+    Math.cos(p.azim) * Math.cos(p.polar),
+  ).multiplyScalar(p.dist);
+  camTween = { from: camera.position.clone(), to: t.clone().add(off), t: 0 };
+  controls.target.copy(t);
+  status.textContent = `시점: ${p.name} · 드래그=회전 휠=줌`;
+}
+let camTween: { from: THREE.Vector3; to: THREE.Vector3; t: number } | null = null;
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'KeyV') applyPreset(presetIdx + 1);
+  if (e.code === 'KeyB') applyPreset(presetIdx - 1);
+});
 
 // ---------- 조명(우리 아트 방향: 좌상단, 낮은 태양) ----------
 const hemi = new THREE.HemisphereLight(0xbfe0ff, 0x4a6a48, 0.85);
@@ -295,7 +326,12 @@ let prev = performance.now();
 /** 한 프레임 진행 — RAF 없이도手动으로 돌릴 수 있게 노출(테스트/백그라운드 탭용) */
 export function tick(dt = 1 / 60) {
   stepHero(dt);
-  if (followCam && hero) {
+  if (camTween) {
+    camTween.t = Math.min(1, camTween.t + dt * 2.2);
+    const e = 1 - Math.pow(1 - camTween.t, 3);
+    camera.position.lerpVectors(camTween.from, camTween.to, e);
+    if (camTween.t >= 1) camTween = null;
+  } else if (followCam && hero) {
     controls.target.lerp(new THREE.Vector3(hero.position.x, hero.position.y + 1.0, hero.position.z), 1 - Math.pow(0.001, dt));
     camera.position.x += (hero.position.x - 8 - camera.position.x) * Math.min(1, dt * 2);
     camera.position.z += (hero.position.z + 9 - camera.position.z) * Math.min(1, dt * 2);
