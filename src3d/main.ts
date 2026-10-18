@@ -51,8 +51,9 @@ const controls = new OrbitControls(camera, canvas);
 controls.target.set(CX, CLOSE_UP ? 1.0 : 0, CZ);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
-controls.minDistance = 3;
-controls.maxDistance = 110;
+// 맵 고정 + 줌인아웃 (18-15): 카메라는 맵 위를 오가며 확대/축소만 한다
+controls.minDistance = 18;
+controls.maxDistance = 120;
 // ---- 360° 자유 회전: 지면 아래로만 못 내려감 (0° = 정수평, 90° = 수평)
 controls.maxPolarAngle = Math.PI * 0.495;
 controls.minPolarAngle = 0.0;
@@ -61,43 +62,41 @@ controls.screenSpacePanning = false;
 controls.rotateSpeed = 0.85;
 controls.zoomSpeed = 0.9;
 
-// ---- 시점 프리셋 — 항상 로빈슨 중심 (드래그/줌은 그대로 유지된다)
+// ---- 시점 프리셋 (18-15): 맵 고정 + 줌인아웃. 캐릭터에 고정되지 않는다 ----
+//  CoC 방식 — 섬 중심 고정. 카메라는 맵 위를 돌아다니며 확대/축소만 한다.
 const VIEW_PRESETS = [
-  { name: '3/4 기본', polar: Math.PI * 0.30, azim: Math.PI * 0.22, dist: 17 },
-  { name: '정면 3/4', polar: Math.PI * 0.34, azim: Math.PI * 0.50, dist: 17 },
-  { name: '측면', polar: Math.PI * 0.33, azim: Math.PI * 0.75, dist: 16 },
-  { name: '뒤 3/4', polar: Math.PI * 0.31, azim: Math.PI * 1.00, dist: 17 },
-  { name: '높이보기', polar: Math.PI * 0.12, azim: Math.PI * 0.22, dist: 26 },
-  { name: '섬 전체', polar: Math.PI * 0.34, azim: Math.PI * 0.22, dist: 74 },
+  { name: '맵 기본', polar: Math.PI * 0.32, azim: Math.PI * 0.22, dist: 76, pan: 0 },
+  { name: '확대', polar: Math.PI * 0.31, azim: Math.PI * 0.22, dist: 36, pan: 0 },
+  { name: '지역 보기', polar: Math.PI * 0.30, azim: Math.PI * 0.22, dist: 23, pan: 1 },
+  { name: '살짝 돌려보기', polar: Math.PI * 0.33, azim: Math.PI * 0.50, dist: 76, pan: 0 },
+  { name: '고개俯視', polar: Math.PI * 0.10, azim: Math.PI * 0.22, dist: 88, pan: 0 },
 ];
 let presetIdx = 0;
 function applyPreset(i: number) {
   const p = VIEW_PRESETS[(i + VIEW_PRESETS.length) % VIEW_PRESETS.length];
   presetIdx = (i + VIEW_PRESETS.length) % VIEW_PRESETS.length;
-  const t = controls.target.clone();
+  const t = p.pan && hero ? panTo(hero.position.x, hero.position.y, hero.position.z)
+                          : new THREE.Vector3(CX, 0, CZ);
   const off = new THREE.Vector3(
     Math.sin(p.azim) * Math.cos(p.polar),
     Math.sin(p.polar),
     Math.cos(p.azim) * Math.cos(p.polar),
   ).multiplyScalar(p.dist);
-  camTween = { from: camera.position.clone(), to: t.clone().add(off), t: 0 };
+  camTween = { from: camera.position.clone(), to: t.clone().add(off), t: 0, target: t.clone() };
 }
 
+/** 월드좌표 → 맵 중심 기준 화면 배율(x,y,z = -1..1) */
+function panTo(wx: number, wy: number, wz: number): THREE.Vector3 {
+  const u = Math.max(-0.42, Math.min(0.42, wx / WORLD));
+  const v = Math.max(-0.42, Math.min(0.42, wz / WORLD));
+  const n = WORLD / 2;
+  return new THREE.Vector3(CX + u * n, 0, CZ + v * n);
+}
 const heroPosX = () => (hero ? hero.position.x : 0);
 const heroPosY = () => (hero ? hero.position.y + 0.85 : 0);
 const heroPosZ = () => (hero ? hero.position.z : 0);
-
-/** 로빈슨을 화면 중앙에 두되, 사용자가 정한 회전/줌은 보존한다 */
-const FOLLOW = new THREE.Vector3();
-function followHero(dt: number) {
-  if (!hero) return;
-  FOLLOW.set(heroPosX(), heroPosY(), heroPosZ()).sub(controls.target);
-  if (FOLLOW.lengthSq() < 1e-8) return;
-  FOLLOW.multiplyScalar(Math.min(1, dt * 4.5));
-  controls.target.add(FOLLOW);
-  camera.position.add(FOLLOW);      // 같은 만큼 이동 → 궤도 유지
-}
-let camTween: { from: THREE.Vector3; to: THREE.Vector3; t: number } | null = null;
+void heroPosX; void heroPosY; void heroPosZ;
+let camTween: { from: THREE.Vector3; to: THREE.Vector3; t: number; target?: THREE.Vector3 } | null = null;
 window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyV') applyPreset(presetIdx + 1);
   if (e.code === 'KeyB') applyPreset(presetIdx - 1);
@@ -351,17 +350,10 @@ function placeAtSpawn() {
     hero.rotation.y = Math.PI * 0.15;
     grounded = true;
     cocify([hero], 0.013);
-    // 시점을 로빈슨에게 고정 (3/4 부감)
-    const p = VIEW_PRESETS[0];
-    controls.target.set(best.x + 0.5, best.gy + 0.85, best.y + 0.5);
-    camera.position.copy(controls.target).add(new THREE.Vector3(
-      Math.sin(p.azim) * Math.cos(p.polar),
-      Math.sin(p.polar),
-      Math.cos(p.azim) * Math.cos(p.polar),
-    ).multiplyScalar(p.dist));
+    // 시점은 맵 고정(CoC 방식) — 크루조가 움직여도 카메라 안 따라간다
     const m = RULES.mesas[0];
     status.textContent = `도착 · ${RULES.terrain ?? ''}${RULES.hasRiver ? ' · 강' : ''}`
-      + `${m ? ` · 산 ${m.R}타일` : ''} · WASD 이동 / V 시점 / 1-4 동작`;
+      + `${m ? ` · 산 ${m.R}타일` : ''} · WASD 이동 / 휠=줌 / V 시점 / 1-4 동작`;
   }
 }
 
@@ -448,10 +440,8 @@ export function tick(dt = 1 / 60) {
     camTween.t = Math.min(1, camTween.t + dt * 2.2);
     const e = 1 - Math.pow(1 - camTween.t, 3);
     camera.position.lerpVectors(camTween.from, camTween.to, e);
-    controls.target.lerp(new THREE.Vector3(heroPosX(), heroPosY(), heroPosZ()), e);
+    if (camTween.target) controls.target.lerp(camTween.target, e);
     if (camTween.t >= 1) camTween = null;
-  } else {
-    followHero(dt);
   }
   mixer.update(dt);
   controls.update();
