@@ -199,6 +199,12 @@ ROOF = mat('roof', (0.46, 0.24, 0.14))
 STONEW = mat('stone_w', (0.55, 0.53, 0.49))
 FIRE = mat('fire', (1.0, 0.55, 0.12))
 FIRE2 = mat('fire2', (1.0, 0.82, 0.30))
+CLAY = mat('clay', (0.72, 0.42, 0.26))
+CLAY2 = mat('clay2', (0.55, 0.30, 0.18))
+GRASS = mat('grass_b', (0.44, 0.62, 0.26))
+SOIL = mat('soil', (0.32, 0.22, 0.14))
+CLAYPOT = mat('clay_pot', (0.60, 0.32, 0.20))
+MELT = mat('melt', (1.0, 0.72, 0.22), 0.40)
 
 
 def build_campfire():
@@ -246,16 +252,79 @@ def build_tower():
     cone('roof', (0, 0, 2.02), (0, 0, 2.62), 0.92, 0.04, ROOF, 4)
 
 
+# ---------- 一 손 : 풀침대 ----------
+def build_bed():
+    for i, (dx, dy) in enumerate([(-0.42, -0.30), (0.42, -0.30), (-0.42, 0.30), (0.42, 0.30)]):
+        box('l%d' % i, (dx, dy, 0.10), (0.12, 0.12, 0.20), WOOD, 0.02)
+    box('frame', (0, 0, 0.24), (1.10, 0.86, 0.10), WOOD2, 0.03)
+    box('bed', (0, 0, 0.33), (0.98, 0.74, 0.10), GRASS, 0.04)
+    box('pil', (0, -0.26, 0.40), (0.46, 0.24, 0.12), WOOD, 0.04)
+    for i in range(5):                       # 풀 다발
+        cone('s%d' % i, (-0.44 + i * 0.22, 0.26, 0.34), (-0.44 + i * 0.22, 0.30, 0.48),
+             0.05, 0.01, GRASS, 5)
+
+
+# ---------- 二 불 : 부엌 ----------
+def build_kitchen():
+    box('stove', (0.18, 0, 0.34), (0.74, 0.74, 0.68), CLAY, 0.05)
+    cone('dome', (0.18, 0, 0.66), (0.18, 0, 0.94), 0.46, 0.34, CLAY2, 10)
+    box('mou', (0.18, -0.34, 0.26), (0.30, 0.14, 0.26), CLAY2, 0.02)
+    cone('flam', (0.18, -0.30, 0.30), (0.16, -0.30, 0.56), 0.11, 0.02, FIRE, 6)
+    # 냄비
+    ball('pot', (-0.36, 0.02, 0.30), 0.24, (1.0, 1.0, 0.72), CLAYPOT, 10)
+    box('lid', (-0.36, 0.02, 0.46), (0.34, 0.34, 0.06), CLAY2, 0.02)
+    box('bench', (-0.36, 0.40, 0.22), (0.62, 0.22, 0.44), WOOD, 0.03)
+
+
+# ---------- 三 돌 : 가시 함정 ----------
+def build_trap():
+    cone('pit', (0, 0, 0.16), (0, 0, 0.01), 0.46, 0.34, SOIL, 10)
+    for i in range(7):                       # 박힌 가시
+        a = i * 0.897
+        x, y = math.cos(a) * 0.30, math.sin(a) * 0.30
+        cone('t%d' % i, (x, y, 0.02), (x * 0.35, y * 0.35, 0.40 + 0.06 * (i % 2)),
+             0.055, 0.012, WOOD, 5)
+    ball('bait', (0, 0, 0.26), 0.10, (1, 1, 0.8), BERRY, 8)
+
+
+# ---------- 四 흙 : 밭 ----------
+def build_farm():
+    box('soil', (0, 0, 0.07), (1.22, 1.22, 0.14), SOIL, 0.03)
+    for i in range(3):                       # 갈 줄
+        y = -0.38 + i * 0.38
+        cone('r%d' % i, (-0.56, y, 0.14), (0.56, y, 0.14), 0.11, 0.11, WOOD, 6)
+        for j in range(4):                   # 싹
+            x = -0.42 + j * 0.28
+            cone('g%d_%d' % (i, j), (x, y, 0.14), (x + 0.04, y, 0.36), 0.05, 0.01, LEAF, 5)
+    for i, (dx, dy) in enumerate([(-0.58, -0.58), (0.58, -0.58), (-0.58, 0.58), (0.58, 0.58)]):
+        cone('f%d' % i, (dx, dy, 0.0), (dx, dy, 0.22), 0.07, 0.05, WOOD, 5)
+
+
+# ---------- 五 청동 : 용광로 ----------
+def build_furnace():
+    box('base', (0, 0, 0.16), (1.06, 0.94, 0.32), STONEW, 0.05)
+    cone('shaft', (0, 0, 0.30), (0, 0, 1.22), 0.42, 0.26, STONEW, 8)
+    box('mouth', (0, -0.36, 0.34), (0.40, 0.16, 0.30), CLAY2, 0.02)
+    cone('glow', (0, -0.36, 0.24), (0, -0.36, 0.50), 0.17, 0.09, MELT, 7)
+    box('anvil', (0.44, 0.10, 0.22), (0.30, 0.30, 0.24), STONE2, 0.03)
+    cone('bellows', (0.30, 0.40, 0.34), (0.06, 0.22, 0.44), 0.20, 0.05, WOOD, 7)
+
+
 BUILDERS = {
     'tree': build_tree, 'palm': build_palm, 'berry': build_berry, 'shell': build_shell,
     'rock': build_rock, 'ore': build_ore, 'tar': build_tar, 'crystal': build_crystal,
-    # 건물
-    'b_campfire': build_campfire, 'b_hut': build_hut, 'b_storage': build_storage,
-    'b_wall': build_wall, 'b_tower': build_tower,
+    # 건물 — 一 손 / 二 불 / 三 돌 / 四 흙 / 五 청동 / 六 철기
+    'b_bed': build_bed, 'b_storage': build_storage,
+    'b_campfire': build_campfire, 'b_kitchen': build_kitchen,
+    'b_wall': build_wall, 'b_trap': build_trap,
+    'b_hut': build_hut, 'b_farm': build_farm,
+    'b_furnace': build_furnace, 'b_tower': build_tower,
 }
 for kind, fn in BUILDERS.items():
     group(kind, fn)
     print('[props3d] %s verts=%d' % (kind, len(BUILT[kind].data.vertices)))
+
+BUILDKINDS = [k for k in BUILDERS if k.startswith('b_')]
 
 # 각 메쉬를 원점 위치에 맞춰 정렬 (glTF 로 붙일 때 튀지 않게)
 for k, ob in BUILT.items():
@@ -273,3 +342,76 @@ except TypeError:
                               export_materials='EXPORT')
 tris = sum(len(o.data.polygons) for o in bpy.data.objects if o.type == 'MESH')
 print('[props3d] saved %s  kinds=%d  faces=%d' % (OUT, len(BUILT), tris))
+
+# ---- 선택적: 건축물 접촉시트 렌더 (B3D_PREVIEW 지정 시) ----
+PV = os.environ.get('B3D_PREVIEW', '')
+if PV:
+    bcells = [k for k in BUILDKINDS]
+    n = len(bcells)
+    cols = 5
+    for i, k in enumerate(bcells):
+        g = BUILT.get(k)
+        if g is None:
+            continue
+        g.location = ((i % cols - (cols - 1) / 2.0) * 3.4, -((i // cols) * 3.4), 0.0)
+    bpy.ops.mesh.primitive_plane_add(size=40, location=(0, 0, -0.02))
+    gm = bpy.data.materials.new('pv_ground')
+    gm.use_nodes = True
+    gm.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (0.62, 0.76, 0.45, 1)
+    bpy.context.object.data.materials.append(gm)
+    bpy.ops.object.select_all(action='DESELECT')
+    for k in bcells:
+        g = BUILT.get(k)
+        if g:
+            g.select_set(True)
+    # 노드(자원) 그룹은 숨긴다 — 원점에 서서 셀을 가린다
+    for k, g in BUILT.items():
+        if k not in bcells:
+            g.hide_render = True
+            g.hide_viewport = True
+    bpy.context.view_layer.objects.active = BUILT[bcells[0]]
+    cam_data = bpy.data.cameras.new('PVCam')
+    cam = bpy.data.objects.new('PVCam', cam_data)
+    # 모든 건축물의 bounding box 로 프레이밍 (잘리지 않게)
+    mn = [1e9] * 3
+    mx = [-1e9] * 3
+    for k in bcells:
+        g = BUILT.get(k)
+        if not g:
+            continue
+        for c in g.bound_box:
+            w = g.matrix_world @ Vector(c)
+            for a in range(3):
+                mn[a] = min(mn[a], w[a])
+                mx[a] = max(mx[a], w[a])
+    cx = (mn[0] + mx[0]) / 2.0
+    cy = (mn[1] + mx[1]) / 2.0
+    span = max(mx[0] - mn[0], mx[1] - mn[1], 1.0)
+    dist = span * 1.55
+    cam.location = (cx, cy - dist * 0.78, dist * 0.62)
+    cam.rotation_euler = (math.radians(52), 0, 0)
+    cam_data.lens = 50
+    bpy.context.scene.collection.objects.link(cam)
+    bpy.context.scene.camera = cam
+    sc = bpy.context.scene
+    sc.render.engine = 'BLENDER_WORKBENCH'
+    sc.render.resolution_x = 1500
+    sc.render.resolution_y = 760
+    sh = sc.display.shading
+    sh.light = 'STUDIO'
+    sh.color_type = 'MATERIAL'
+    sh.show_cavity = True
+    sh.show_object_outline = True
+    sc.render.filepath = PV
+    bpy.ops.render.render(write_still=True)
+    print('[props3d] preview saved %s' % PV)
+    for kind in bcells:
+        g = BUILT.get(kind)
+        if not g:
+            continue
+        bb = [g.matrix_world @ Vector(c) for c in g.bound_box]
+        mn = [min(v[a] for v in bb) for a in range(3)]
+        mx = [max(v[a] for v in bb) for a in range(3)]
+        mats = [m.name for m in g.data.materials]
+        print('[props3d] PV %-12s size=%.2f x %.2f x %.2f mats=%s'
+              % (kind, mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2], ','.join(mats)))

@@ -310,7 +310,8 @@ const propTemplates = new Map<string, THREE.Object3D>();
 const propNodes: { kind: string; x: number; z: number; y: number; obj: THREE.Object3D }[] = [];
 
 const PROP_KINDS = ['tree', 'palm', 'berry', 'shell', 'rock', 'ore', 'tar', 'crystal',
-  'b_campfire', 'b_hut', 'b_storage', 'b_wall', 'b_tower'];
+  'b_bed', 'b_storage', 'b_campfire', 'b_kitchen', 'b_wall', 'b_trap',
+  'b_hut', 'b_farm', 'b_furnace', 'b_tower'];
 gltf.load('/glb/props3d.glb', (g) => {
   propsRoot = g.scene;
   // 1) 툰 + 외곽선 (복제본이 함께 따라가도록 먼저)
@@ -920,14 +921,26 @@ let orderReason = '';
 // ---------- 건설 (BUILD) ----------
 interface BuildDef {
   kind: string; name: string; icon: string; cost: Partial<Record<ItemKey, number>>; size: number;
-  max: number;                       // 18-19 섬 전체 수량 상한
+  max: number; chapter: number;         // 18-22 스킬 인장과 1:1
 }
+/** 18-22: 인장 순서대로 정렬 — 건설 목록도 스킬북과 같은 순서로 보인다 */
 const BUILDS: BuildDef[] = [
-  { kind: 'b_campfire', name: '모닥불', icon: '🔥', cost: { wood: 4, stone: 2 }, size: 1, max: BUILD_MAX.b_campfire },
-  { kind: 'b_hut', name: '오두막', icon: '🛖', cost: { wood: 12, stone: 4 }, size: 2, max: BUILD_MAX.b_hut },
-  { kind: 'b_storage', name: '창고', icon: '📦', cost: { wood: 16, stone: 6 }, size: 2, max: BUILD_MAX.b_storage },
-  { kind: 'b_wall', name: '울타리', icon: '🧱', cost: { wood: 6, stone: 2 }, size: 1, max: BUILD_MAX.b_wall },
-  { kind: 'b_tower', name: '감시탑', icon: '🗼', cost: { wood: 20, stone: 14 }, size: 2, max: BUILD_MAX.b_tower },
+  // 一 손 — 스킬 불필요
+  { kind: 'b_bed', name: '풀침대', icon: '🛏️', cost: { wood: 4, food: 2 }, size: 1, max: BUILD_MAX.b_bed, chapter: 0 },
+  { kind: 'b_storage', name: '창고', icon: '📦', cost: { wood: 16, stone: 6 }, size: 2, max: BUILD_MAX.b_storage, chapter: 0 },
+  // 二 불 — 불 피우기 / 토기 요리
+  { kind: 'b_campfire', name: '모닥불', icon: '🔥', cost: { wood: 4, stone: 2 }, size: 1, max: BUILD_MAX.b_campfire, chapter: 1 },
+  { kind: 'b_kitchen', name: '부엌', icon: '🍲', cost: { wood: 10, stone: 8 }, size: 2, max: BUILD_MAX.b_kitchen, chapter: 1 },
+  // 三 돌 — 석기 / 사냥 도구
+  { kind: 'b_wall', name: '울타리', icon: '🧱', cost: { wood: 6, stone: 2 }, size: 1, max: BUILD_MAX.b_wall, chapter: 2 },
+  { kind: 'b_trap', name: '가시 함정', icon: '🕳️', cost: { wood: 3, food: 1 }, size: 1, max: BUILD_MAX.b_trap, chapter: 2 },
+  // 四 흙 — 쉘터 건축 / 경작
+  { kind: 'b_hut', name: '오두막', icon: '🛖', cost: { wood: 12, stone: 4 }, size: 2, max: BUILD_MAX.b_hut, chapter: 3 },
+  { kind: 'b_farm', name: '밭', icon: '🌱', cost: { wood: 8, food: 4 }, size: 2, max: BUILD_MAX.b_farm, chapter: 3 },
+  // 五 청동 — 제련
+  { kind: 'b_furnace', name: '용광로', icon: '🏭', cost: { wood: 14, stone: 18 }, size: 2, max: BUILD_MAX.b_furnace, chapter: 4 },
+  // 六 철기 — 철기
+  { kind: 'b_tower', name: '감시탑', icon: '🗼', cost: { wood: 20, stone: 14 }, size: 2, max: BUILD_MAX.b_tower, chapter: 5 },
 ];
 
 // ============================================================
@@ -1047,7 +1060,12 @@ function paintBuildPanel() {
   if (!list.length) {
     html += `<div class="bempty"><span>📘</span><span>아직 배운 것이 없다</span></div>`;
   }
+  let last = -1;
   for (const b of list) {
+    if (b.chapter !== last) {           // 인장 구분선 — 스킬북과 같은 순서
+      last = b.chapter;
+      html += `<div class="bch"><b>${'一二三四五六'[b.chapter] ?? b.chapter + 1}</b> ${SKILL_CHAPTERS[b.chapter] ?? ''}</div>`;
+    }
     const afford = canAfford(b.cost);
     const cost = Object.entries(b.cost).map(([k, v]) => ITEM[k as ItemKey].icon + v).join(' ');
     html += `<button class="bi${b.kind === BUILDS[buildIdx]?.kind ? ' on' : ''}${afford ? '' : ' poor'}"

@@ -434,55 +434,60 @@ export interface SkillDef2 {
   chapter: number;           // 인장(章) — 읽는 순서
 }
 
-/** 인장(章) 제목 */
-export const SKILL_CHAPTERS = ['손', '몸', '불', '돌', '사냥', '철기'];
+/** 인장(章) — 시대 순. 각 장이 건축물 2종을 연다 */
+export const SKILL_CHAPTERS = ['손', '불', '돌', '흙', '청동', '철기'];
 
-/** 건축 + 생존 스킬 트리 (GDD 9장 · 13-1) */
+/**
+ * 스킬 트리 = 건축물 해금표 (GDD 13-1) + 생존 기술
+ * 한 인장 = 한 시대 = 건축물 2종
+ */
 export const SKILL_TREE: SkillDef2[] = [
-  // ── 1장 손 ──
-  { id: 'fire',    name: '불 피우기',  icon: '🔥', time: 8,  prereq: null,    effect: '불을 다룬다',        unlock: ['b_campfire'], chapter: 0 },
+  // ── 一 손 · 맨손으로 버틴다 (첫날) ──
   { id: 'gather',  name: '채집의 손길', icon: '⛏️', time: 10, prereq: null,   effect: '채집 속도 +30%',      unlock: [], chapter: 0 },
-  { id: 'craft',   name: '손재주',     icon: '🧰', time: 14, prereq: null,    effect: '제작 시간 −15%',      unlock: [], chapter: 0 },
-  { id: 'study',   name: '집중력',     icon: '📖', time: 16, prereq: 'fire',   effect: '공부 시간 −25%',      unlock: [], chapter: 0 },
-  { id: 'shelter', name: '쉘터 건축', icon: '🛖', time: 18, prereq: 'fire',    effect: '집을 짓는다 · 건물 HP +40%', unlock: ['b_hut'], chapter: 0 },
-  { id: 'gather2', name: '도구 다루기', icon: '🔧', time: 22, prereq: 'gather', effect: '채집 속도 +30% 추가', unlock: [], chapter: 0 },
+  { id: 'move',    name: '민첩한 발',  icon: '👟', time: 14, prereq: null,    effect: '이동 속도 +12%',      unlock: [], chapter: 0 },
+  { id: 'craft',   name: '손재주',     icon: '🧰', time: 16, prereq: null,    effect: '제작 시간 −15%',      unlock: [], chapter: 0 },
+  { id: 'hp',      name: '강인한 몸',  icon: '❤️', time: 18, prereq: null,    effect: '최대 체력 +25',       unlock: [], chapter: 0 },
 
-  // ── 2장 몸 ──
-  { id: 'hp',      name: '강인한 몸',  icon: '❤️', time: 20, prereq: null,    effect: '최대 체력 +25',       unlock: [], chapter: 1 },
-  { id: 'move',    name: '민첩한 발',  icon: '👟', time: 18, prereq: null,    effect: '이동 속도 +12%',      unlock: [], chapter: 1 },
-  { id: 'energy',  name: '절약하는 위', icon: '🍽️', time: 24, prereq: 'move', effect: '에너지 소모 −25%',    unlock: [], chapter: 1 },
-  { id: 'night',   name: '밤눈',      icon: '🌙', time: 20, prereq: null,    effect: '밤이 보인다',         unlock: [], chapter: 1 },
-  { id: 'craft2',  name: '대장장이의 손', icon: '🔨', time: 34, prereq: 'craft', effect: '제작 시간 −15% 추가', unlock: [], chapter: 1 },
+  // ── 二 불 · 불을 피우다 (1일차) ──
+  { id: 'fire',    name: '불 피우기',  icon: '🔥', time: 12, prereq: null,    effect: '🔥 모닥불',           unlock: ['b_campfire'], chapter: 1 },
+  { id: 'warm',    name: '불꽃 친화',  icon: '🕯️', time: 22, prereq: 'fire', effect: '불 근처 체온 회복 +60%', unlock: [], chapter: 1 },
+  { id: 'pottery', name: '토기 요리',  icon: '🍲', time: 26, prereq: 'fire',   effect: '🍲 부엌 · 요리 슬롯', unlock: ['b_kitchen'], chapter: 1 },
 
-  // ── 3장 불 ──
-  { id: 'warm',    name: '불꽃 친화',  icon: '🕯️', time: 24, prereq: 'fire',   effect: '불 근처 체온 회복 +60%', unlock: [], chapter: 2 },
+  // ── 三 돌 · 돌을 깨다 (도구) ──
+  { id: 'stone',   name: '석기',      icon: '🪨', time: 26, prereq: 'craft',  effect: '🧱 울타리',           unlock: ['b_wall'], chapter: 2 },
+  { id: 'craft2',  name: '대장장이의 손', icon: '🔨', time: 32, prereq: 'stone', effect: '제작 시간 −15% 추가', unlock: [], chapter: 2 },
+  { id: 'trap',    name: '사냥 도구',  icon: '🪤', time: 30, prereq: 'stone',  effect: '🕳️ 가시 함정',        unlock: ['b_trap'], chapter: 2 },
 
-  // ── 4장 돌 ──
-  { id: 'stone',   name: '석기',      icon: '🪨', time: 26, prereq: 'shelter', effect: '바깥을 막는다',       unlock: ['b_wall'], chapter: 3 },
-  { id: 'pick',    name: '괭이질',    icon: '⛏️', time: 30, prereq: 'stone',   effect: '바위·광채가 잘 깨진다', unlock: [], chapter: 3 },
+  // ── 四 흙 · 땅을 판다 (정착) ──
+  { id: 'shelter', name: '쉘터 건축', icon: '🛖', time: 22, prereq: 'fire',   effect: '🛖 오두막 · 건물 HP +40%', unlock: ['b_hut'], chapter: 3 },
+  { id: 'study',   name: '집중력',     icon: '📖', time: 20, prereq: 'fire',   effect: '공부 시간 −25%',      unlock: [], chapter: 3 },
+  { id: 'farm',    name: '경작',      icon: '🌾', time: 34, prereq: 'shelter', effect: '🌱 밭 · 작물을 심는다', unlock: ['b_farm'], chapter: 3 },
 
-  // ── 5장 사냥 ──
-  { id: 'hunt',    name: '사냥꾼',    icon: '🏹', time: 30, prereq: 'night',   effect: '공격력 +20%',         unlock: [], chapter: 4 },
-  { id: 'fish',    name: '어부의 눈', icon: '🎣', time: 28, prereq: 'night',   effect: '낚시 성공량 +1',       unlock: [], chapter: 4 },
+  // ── 五 청동 · 불로을 다다르다 (제련) ──
+  { id: 'night',   name: '밤눈',      icon: '🌙', time: 24, prereq: null,    effect: '밤이 보인다',         unlock: [], chapter: 4 },
+  { id: 'fish',    name: '어부의 눈', icon: '🎣', time: 28, prereq: 'night',  effect: '낚시 성공량 +1',       unlock: [], chapter: 4 },
+  { id: 'smelt',   name: '제련',      icon: '🏭', time: 42, prereq: 'shelter', effect: '🏭 용광로 · 금속을 얻는다', unlock: ['b_furnace'], chapter: 4 },
 
-  // ── 6장 철기 ──
-  { id: 'iron',    name: '철기',      icon: '⛓️', time: 40, prereq: 'stone',   effect: '섬을 내려다본다',     unlock: ['b_tower'], chapter: 5 },
+  // ── 六 철기 · 철기를 얻다 (무기) ──
+  { id: 'hunt',    name: '사냥꾼',    icon: '🏹', time: 34, prereq: 'trap',   effect: '공격력 +20%',         unlock: [], chapter: 5 },
+  { id: 'iron',    name: '철기',      icon: '⛓️', time: 48, prereq: 'smelt',  effect: '🗼 감시탑 · 섬을 내려다본다', unlock: ['b_tower'], chapter: 5 },
 ];
 
 /** 18-19: 섬 전체 건설 수량 상한 — 주요 시설은 1개, 소형 시설은 여러 개 (GDD 13-1) */
 export const BUILD_MAX: Record<string, number> = {
-  b_campfire: 5,      // 모닥불 — 여러 개 (18-1 기본값)
-  b_hut: 1,           // 오두막 — 주요 시설 1개
-  b_storage: 1,       // 창고 — 주요 시설 1개
-  b_wall: 40,         // 울타리 — 여러 개
-  b_tower: 2,         // 감시탑 — 섬 전체를 볼 수 있는 곳은 한정
+  b_bed: 1, b_storage: 1,                                  // 一 손
+  b_campfire: 5, b_kitchen: 1,                             // 二 불
+  b_wall: 40, b_trap: 20,                                  // 三 돌
+  b_hut: 1, b_farm: 3,                                     // 四 흙
+  b_furnace: 1,                                            // 五 청동
+  b_tower: 2,                                              // 六 철기
 };
 
-/** 시작부터 아는 스킬 (빈손으로 처음 하는 것) */
-export const START_SKILLS: string[] = ['fire'];
+/** 시작부터 아는 스킬 — 빈손으로 하는 것 (없어도 되는 시설) */
+export const START_SKILLS: string[] = [];
 
 /** 스킬 없이도 되는 기본 시설 (GDD 13-1 "해금: 기본") */
-export const FREE_BUILDS: string[] = ['b_storage'];
+export const FREE_BUILDS: string[] = ['b_bed', 'b_storage'];
 
 export const NODE_KINDS: Record<string, NodeKindDef> = {
   tree:    { name: '나무',        family: 'wood',    drops: [{ item: 'wood', min: 3, max: 5 }], tex: 'n_tree',  radius: 22 },
