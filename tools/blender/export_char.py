@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
 Robinson Crusoe 3D character -> GLB (Three.js)
-  · low-poly cartoon (CoC style), flat color blocks
+  · CHIBI (3등신) low-poly cartoon — Clash of Clans 비율
+  · 큰 머리 / 짧고 굵은 팔다리 / 눈·눈썹 있는 카툰 얼굴
   · armature rig (hips/spine/chest/head/arms/legs)
-  · animations: Idle / Walk / Attack / Hit
-  · env: B3D_GLB (output)  B3D_STAGE (0 naked, 1 shirt, 2 full gear)
+  · animations: Idle / Walk / Attack / Hit  (+ Shipwreck at stage 0)
+  · env: B3D_GLB (out)  B3D_STAGE (0 naked, 1 shirt, 2 full gear)
 
-Usage:
-  blender -b --python tools/blender/export_char.py
+Usage:  blender -b --python tools/blender/export_char.py
 """
 import bpy, bpy.ops, math, os
 from mathutils import Vector
@@ -25,11 +25,22 @@ for blk in (bpy.data.meshes, bpy.data.materials, bpy.data.armatures, bpy.data.ac
 
 PARTS = []
 
+# ---------------------------------------------------------------- proportions (chibi)
+TOP = 1.28          # 전체 높이
+HIPZ = 0.62
+KNEE = 0.32
+ANKLE = 0.11
+CHEST_Z = 0.94
+SHOULDER_Z = 0.98
+SHOULDER_X = 0.235
+HEAD_Z = 1.155
+HEAD_R = 0.215
+ELBOW_Z = 0.74
+WRIST_Z = 0.565
+
 # ---------------------------------------------------------------- materials
-def mat(name, rgb, rough=0.75):
-    m = bpy.data.materials.get(name)
-    if m is None:
-        m = bpy.data.materials.new(name)
+def mat(name, rgb, rough=0.8):
+    m = bpy.data.materials.get(name) or bpy.data.materials.new(name)
     m.use_nodes = True
     b = m.node_tree.nodes.get('Principled BSDF')
     b.inputs['Base Color'].default_value = (rgb[0], rgb[1], rgb[2], 1.0)
@@ -37,27 +48,22 @@ def mat(name, rgb, rough=0.75):
     m.diffuse_color = (rgb[0], rgb[1], rgb[2], 1.0)
     return m
 
-SKIN = mat('skin', (0.92, 0.70, 0.55))
-SKIN_D = mat('skin_d', (0.80, 0.58, 0.45))
-HAIR = mat('hair', (0.26, 0.17, 0.11))
-HAIR_S = mat('hair_s', (0.34, 0.26, 0.20))
-SHIRT = mat('shirt', (0.90, 0.85, 0.74))     # 낡은 크림색 리넨
-PANTS = mat('pants', (0.52, 0.42, 0.28))
-PANTS_R = mat('pants_r', (0.40, 0.19, 0.13))  # stage 2 의 벽돌빨간 카고
-BOOT = mat('boot', (0.38, 0.30, 0.22))
-COAT = mat('coat', (0.60, 0.42, 0.24))
-FUR = mat('fur', (0.88, 0.83, 0.70))
-LEATHER = mat('leather', (0.45, 0.28, 0.16))
-GUN = mat('gun', (0.20, 0.18, 0.16))
-POT = mat('pot', (0.30, 0.34, 0.42))
-WICK = mat('wicker', (0.62, 0.45, 0.24))
-ROPE = mat('rope', (0.72, 0.64, 0.46))
-WOOD = mat('wood', (0.36, 0.20, 0.11))
-
-# 刚性装备专用材质 — 骨骼固定用(有一个材质就能在蒙皮后精确找到它的顶点)
-G_BACK = mat('g_back', (0.34, 0.21, 0.12))     # 背后的枪/背篓/皮毛领
-G_BELT = mat('g_belt', (0.30, 0.34, 0.42))     # 腰带工具
-G_HEAD = mat('g_head', (0.86, 0.80, 0.66))     # 帽子
+SKIN = mat('skin', (0.96, 0.74, 0.58))
+SKIN_D = mat('skin_d', (0.86, 0.62, 0.48))
+HAIR = mat('hair', (0.24, 0.15, 0.10))
+HAIR_S = mat('hair_s', (0.36, 0.28, 0.22))
+EYE = mat('eye', (0.10, 0.09, 0.12))
+SHIRT = mat('shirt', (0.95, 0.90, 0.78))
+PANTS = mat('pants', (0.55, 0.44, 0.29))
+PANTS_R = mat('pants_r', (0.46, 0.21, 0.14))
+BOOT = mat('boot', (0.40, 0.31, 0.23))
+COAT = mat('coat', (0.66, 0.45, 0.25))
+FUR = mat('fur', (0.93, 0.88, 0.74))
+LEATHER = mat('leather', (0.48, 0.30, 0.17))
+POT = mat('pot', (0.36, 0.40, 0.48))
+G_BACK = mat('g_back', (0.38, 0.23, 0.13))     # 背部装备（骨骼固定）
+G_BELT = mat('g_belt', (0.34, 0.38, 0.46))     # 腰带工具（骨骼固定）
+G_HEAD = mat('g_head', (0.90, 0.85, 0.70))     # 帽子（骨骼固定）
 
 def link(ob, m):
     ob.data.materials.append(m)
@@ -85,12 +91,10 @@ def ball(name, c, r, scale=(1, 1, 1), m=None, segs=16):
     return finish(ob)
 
 def cone(name, p1, p2, r1, r2, m=None, verts=10):
-    """tapered limb between two points"""
     p1, p2 = Vector(p1), Vector(p2)
     d = p2 - p1
-    L = d.length
     bpy.ops.mesh.primitive_cone_add(vertices=verts, radius1=r1, radius2=r2,
-                                    depth=L, location=(p1 + p2) * 0.5)
+                                    depth=d.length, location=(p1 + p2) * 0.5)
     ob = bpy.context.object
     ob.name = name
     ob.rotation_mode = 'QUATERNION'
@@ -112,99 +116,89 @@ def box(name, c, size, m=None, bevel=0.02, rot=0.0):
     if m: link(ob, m)
     return finish(ob)
 
-# ---------------------------------------------------------------- body
-# 2번 이미지 기준: 높이 1.78, 0 = 발바닥, 얼굴은 -Y
-LEG_MAT = PANTS_R if STAGE == 2 else PANTS        # stage 2 = 벽돌빨간 카고
-HIPZ = 0.92
-SHOULDER_Z = 1.40
-SHOULDER_X = 0.235                            # 어깨 넓게
+# ---------------------------------------------------------------- body (chibi)
+LEG_MAT = PANTS_R if STAGE == 2 else PANTS
+body_mat = SHIRT if STAGE >= 1 else SKIN
 
-box('pelvis', (0, 0, HIPZ), (0.42, 0.30, 0.32), PANTS, 0.06)
-body_mat = SHIRT if STAGE >= 1 else SKIN          # stage 0 = 상반신 벌거벗음
-box('torso', (0, 0, 1.22), (0.50, 0.34, 0.56), body_mat, 0.08)
-box('chest', (0, 0.005, 1.44), (0.56, 0.36, 0.20), body_mat, 0.07)
-if STAGE >= 1:                                    # 찢어진 셔츠 자락
-    box('shirt_tail', (0, -0.02, 0.95), (0.42, 0.29, 0.30), SHIRT, 0.06)
-    box('shirt_open', (0, -0.14, 1.30), (0.20, 0.06, 0.40), SHIRT, 0.03)   # 앞이 벌어진 셔츠
+# 다리 — 짧고 굵게
+for s, tag in ((-1, 'L'), (1, 'R')):
+    sx = s * 0.115
+    cone('thigh' + tag, (sx, 0, HIPZ - 0.02), (sx, 0, KNEE), 0.150, 0.125, LEG_MAT, 10)
+    cone('shin' + tag, (sx, 0, KNEE), (sx, 0, ANKLE), 0.125, 0.100, LEG_MAT, 10)
+    if STAGE >= 1:
+        box('boot' + tag, (sx, 0.055, 0.075), (0.165, 0.27, 0.15), BOOT, 0.04)
+    else:
+        box('foot' + tag, (sx, 0.070, 0.065), (0.150, 0.245, 0.13), SKIN, 0.045)
+        cone('rag' + tag, (sx, 0, 0.40), (sx, 0, 0.16), 0.128, 0.115, PANTS, 8)
+    if STAGE == 2:
+        cone('wrap' + tag, (sx, 0, 0.38), (sx, 0, 0.15), 0.135, 0.115, FUR, 10)
 
-# neck + head  (목 짧게)
-cone('neck', (0, 0, 1.48), (0, 0, 1.585), 0.075, 0.080, SKIN_D, 8)
-ball('head', (0, 0, 1.705), 0.158, (1.0, 0.95, 1.06), SKIN, 18)
-ball('brow', (0, -0.128, 1.735), 0.075, (1.5, 0.42, 0.36), HAIR, 10)   # heavy brow (aged face)
-ball('nose', (0, -0.150, 1.685), 0.035, (0.8, 1.2, 0.8), SKIN, 8)
-ball('hair', (0, 0.012, 1.735), 0.163, (1.0, 0.98, 0.98), HAIR, 18)
-ball('hair_back', (0, 0.075, 1.665), 0.115, (1.25, 0.75, 1.35), HAIR, 12)
+# 골반 + 몸통 — 크고 넓게
+box('pelvis', (0, 0, HIPZ), (0.44, 0.32, 0.30), LEG_MAT, 0.07)
+box('torso', (0, 0, 0.82), (0.50, 0.36, 0.44), body_mat, 0.09)
+box('chest', (0, 0.005, CHEST_Z), (0.54, 0.38, 0.20), body_mat, 0.08)
+if STAGE >= 1:
+    box('shirt_tail', (0, -0.01, 0.60), (0.52, 0.37, 0.22), SHIRT, 0.07)
+    box('shirt_open', (0, -0.185, 0.88), (0.22, 0.06, 0.30), SHIRT, 0.03)
 
-# 수염 — 생존자의 아크(0 무 → 1 회색 수염 → 2 통짜 수염)
-if STAGE == 1:
-    ball('stubble', (0, -0.055, 1.615), 0.098, (1.02, 0.92, 0.72), HAIR_S, 14)
-elif STAGE == 2:
-    ball('beard', (0, -0.048, 1.600), 0.112, (1.05, 0.95, 0.95), HAIR, 16)      # 통짜 수염
-    ball('beard_tip', (0, -0.075, 1.545), 0.075, (0.85, 0.85, 1.15), HAIR, 12)
-    ball('moustache', (0, -0.132, 1.665), 0.070, (1.55, 0.55, 0.34), HAIR, 12)  #.handlebar
-
-# arms
+# 팔 — 짧고 굵게
 for s, tag in ((-1, 'L'), (1, 'R')):
     sx = s * SHOULDER_X
-    ball('sh' + tag, (sx, 0, SHOULDER_Z), 0.115, (1, 1, 0.95), SHIRT if STAGE >= 1 else SKIN, 10)
-    cone('uarm' + tag, (sx, 0, SHOULDER_Z), (sx * 1.14, 0.01, 1.14), 0.082, 0.066,
-         SHIRT if STAGE >= 1 else SKIN, 8)
-    cone('farm' + tag, (sx * 1.14, 0.01, 1.14), (sx * 1.20, 0.02, 0.92), 0.066, 0.055,
-         SKIN, 8)
-    ball('hand' + tag, (sx * 1.20, 0.02, 0.885), 0.068, (1, 1.1, 1), SKIN, 8)
+    ball('sh' + tag, (sx, 0, SHOULDER_Z), 0.115, (1, 1, 0.95), body_mat, 12)
+    cone('uarm' + tag, (sx, 0, SHOULDER_Z), (sx * 1.10, 0.01, ELBOW_Z), 0.098, 0.082, body_mat, 10)
+    cone('farm' + tag, (sx * 1.10, 0.01, ELBOW_Z), (sx * 1.16, 0.02, WRIST_Z), 0.082, 0.070, SKIN, 10)
+    ball('hand' + tag, (sx * 1.16, 0.02, WRIST_Z - 0.025), 0.082, (1, 1.05, 1), SKIN, 10)
 
-# legs
+# 머리 — 크게 (3등신의 핵심)
+cone('neck', (0, 0, 0.99), (0, 0, 1.03), 0.105, 0.110, SKIN_D, 10)
+ball('head', (0, 0, HEAD_Z), HEAD_R, (1.0, 0.93, 1.02), SKIN, 24)
+ball('hair', (0, 0.015, HEAD_Z + 0.055), HEAD_R * 1.02, (1.0, 0.99, 0.95), HAIR, 24)
+ball('hair_back', (0, 0.085, HEAD_Z - 0.03), HEAD_R * 0.72, (1.20, 0.70, 1.25), HAIR, 14)
+# 얼굴 — 눈·눈썹·코 (카툰 표정)
 for s, tag in ((-1, 'L'), (1, 'R')):
-    sx = s * 0.105
-    cone('thigh' + tag, (sx, 0, HIPZ - 0.02), (sx, 0, 0.52), 0.125, 0.100, LEG_MAT, 8)
-    cone('shin' + tag, (sx, 0, 0.52), (sx, 0, 0.12), 0.100, 0.072, LEG_MAT, 8)
-    if STAGE == 2:
-        cone('wrap' + tag, (sx, 0, 0.44), (sx, 0, 0.14), 0.086, 0.070, FUR, 8)    # 사sense wraps
-        box('boot' + tag, (sx, 0.045, 0.055), (0.13, 0.26, 0.11), BOOT, 0.03)
-    elif STAGE == 1:
-        box('boot' + tag, (sx, 0.045, 0.055), (0.13, 0.26, 0.11), BOOT, 0.03)
-    else:
-        box('foot' + tag, (sx, 0.065, 0.045), (0.115, 0.235, 0.09), SKIN, 0.035)   # 맨발
-        cone('rag' + tag, (sx, 0, 0.40), (sx, 0, 0.14), 0.082, 0.070, PANTS, 6)    # 찢어진 바짓단
-    if STAGE == 2:
-        box('knee' + tag, (sx, -0.055, 0.50), (0.10, 0.03, 0.11), COAT, 0.02)      # 무릎 패치
+    ball('eye' + tag, (s * 0.072, -0.176, HEAD_Z + 0.015), 0.030, (1.0, 0.55, 1.15), EYE, 10)
+    ball('brow' + tag, (s * 0.076, -0.170, HEAD_Z + 0.082), 0.038, (1.5, 0.42, 0.30), HAIR, 8)
+ball('nose', (0, -0.190, HEAD_Z - 0.018), 0.036, (0.85, 1.15, 0.8), SKIN, 8)
+
+# 수염 — 생존자의 아크 (0 없음 → 1 회색 → 2 통짜)
+if STAGE == 1:
+    ball('stubble', (0, -0.095, HEAD_Z - 0.115), 0.125, (1.02, 0.90, 0.62), HAIR_S, 16)
+elif STAGE == 2:
+    ball('beard', (0, -0.088, HEAD_Z - 0.118), 0.150, (1.05, 0.94, 0.86), HAIR, 18)
+    ball('beard_tip', (0, -0.115, HEAD_Z - 0.196), 0.100, (0.82, 0.82, 1.10), HAIR, 12)
+    ball('moustache', (0, -0.190, HEAD_Z - 0.020), 0.090, (1.55, 0.55, 0.30), HAIR, 12)
 
 # ---------------------------------------------------------------- gear
 if STAGE >= 1:
-    # 벨트 + 화약통
-    box('belt', (0, 0, 1.045), (0.46, 0.32, 0.09), LEATHER, 0.02)
-    box('buckle', (0, -0.17, 1.045), (0.08, 0.03, 0.07), G_BELT, 0.012)
-    box('pouch', (0.21, -0.02, 0.99), (0.11, 0.12, 0.14), G_BELT, 0.03)
-    ball('flask', (0.235, 0.03, 0.93), 0.050, (1, 1, 1.35), G_BELT, 8)
-    ball('flask2', (-0.235, 0.03, 0.95), 0.044, (1, 1, 1.25), G_BELT, 8)
-    # 허리 도끼 + 단검 (크루조는 창이 아니라 단검과 총을 썼다)
-    cone('axe_handle', (0.255, -0.11, 0.98), (0.275, -0.14, 0.74), 0.016, 0.016, G_BELT, 6)
-    box('axe_head', (0.275, -0.14, 0.72), (0.11, 0.035, 0.08), POT, 0.012)
-    box('dagger_grip', (-0.255, -0.12, 1.02), (0.045, 0.045, 0.10), G_BELT, 0.015)
-    cone('dagger_blade', (-0.255, -0.125, 0.965), (-0.258, -0.13, 0.80), 0.026, 0.002, POT, 6)
-    box('dagger_guard', (-0.255, -0.12, 0.965), (0.075, 0.045, 0.022), POT, 0.008)
+    box('belt', (0, 0, 0.655), (0.46, 0.34, 0.10), LEATHER, 0.02)
+    box('buckle', (0, -0.175, 0.655), (0.09, 0.03, 0.08), G_BELT, 0.012)
+    box('pouch', (0.225, -0.02, 0.615), (0.12, 0.13, 0.15), G_BELT, 0.03)
+    ball('flask', (0.250, 0.03, 0.545), 0.055, (1, 1, 1.30), G_BELT, 8)
+    ball('flask2', (-0.250, 0.03, 0.565), 0.048, (1, 1, 1.22), G_BELT, 8)
+    # 도끼 + 단검 (크루조는 창이 아니라 단검과 총을 썼다)
+    cone('axe_handle', (0.268, -0.11, 0.64), (0.290, -0.14, 0.40), 0.018, 0.018, G_BELT, 6)
+    box('axe_head', (0.290, -0.14, 0.38), (0.12, 0.04, 0.09), POT, 0.012)
+    box('dagger_grip', (-0.268, -0.12, 0.68), (0.05, 0.05, 0.11), G_BELT, 0.015)
+    cone('dagger_blade', (-0.268, -0.125, 0.625), (-0.271, -0.13, 0.45), 0.028, 0.002, POT, 6)
+    box('dagger_guard', (-0.268, -0.12, 0.625), (0.08, 0.05, 0.024), POT, 0.008)
 
 if STAGE == 2:
-    # 곰모이 코트 + 깃털 깃 + 벨트 도구
-    box('coat', (0, 0.005, 1.20), (0.56, 0.40, 0.60), COAT, 0.10)
-    box('coat_skirt', (0, 0.005, 0.86), (0.60, 0.42, 0.30), COAT, 0.09)
-    ball('collar', (0, 0.02, 1.515), 0.235, (1.05, 0.95, 0.42), G_BACK, 14)
-    box('coat_trim', (0, -0.205, 1.30), (0.22, 0.05, 0.56), G_BACK, 0.02)
-    box('tool_saw', (0.245, -0.13, 1.00), (0.045, 0.03, 0.22), G_BELT, 0.01)
-    # 청단 사냥모자
-    ball('hat', (0, 0.01, 1.895), 0.190, (1.0, 1.0, 0.68), G_HEAD, 16)
-    box('hatbrim', (0, 0.01, 1.800), (0.46, 0.46, 0.05), G_HEAD, 0.02)
-    ball('hatband', (0, 0.01, 1.822), 0.194, (1.0, 1.0, 0.16), G_BACK, 14)
-    # 바구니 등롱 + 밧줄 (등에 붙는 것 = 모두 강체)
-    ball('basket', (0, 0.255, 1.24), 0.175, (1.0, 0.62, 1.15), G_BACK, 12)
-    ball('basket_in', (0, 0.35, 1.24), 0.130, (1.0, 0.5, 1.0), G_BACK, 10)
-    ball('rope', (0, 0.385, 1.30), 0.095, (1.15, 0.35, 0.55), G_BACK, 10)
-    box('strap_l', (-0.145, 0.13, 1.32), (0.07, 0.24, 0.10), G_BACK, 0.02)
-    box('strap_r', (0.145, 0.13, 1.32), (0.07, 0.24, 0.10), G_BACK, 0.02)
-    # 플린트록 musket — 등 위로 비스듬히 (강체)
-    cone('gun_stock', (0.30, 0.26, 0.70), (0.14, 0.35, 1.18), 0.042, 0.034, G_BACK, 8)
-    cone('gun_barrel', (0.13, 0.355, 1.16), (-0.11, 0.39, 1.68), 0.022, 0.019, G_BACK, 8)
-    box('gun_lock', (0.14, 0.375, 1.16), (0.05, 0.03, 0.10), G_BACK, 0.01)
+    box('coat', (0, 0.005, 0.80), (0.56, 0.42, 0.46), COAT, 0.10)
+    box('coat_skirt', (0, 0.005, 0.55), (0.60, 0.44, 0.26), COAT, 0.09)
+    ball('collar', (0, 0.02, 1.005), 0.245, (1.05, 0.95, 0.40), G_BACK, 16)
+    box('coat_trim', (0, -0.215, 0.86), (0.22, 0.05, 0.44), G_BACK, 0.02)
+    box('tool_saw', (0.255, -0.13, 0.64), (0.05, 0.03, 0.22), G_BELT, 0.01)
+    ball('hat', (0, 0.01, 1.360), 0.200, (1.0, 1.0, 0.66), G_HEAD, 18)
+    box('hatbrim', (0, 0.01, 1.270), (0.48, 0.48, 0.05), G_HEAD, 0.02)
+    ball('hatband', (0, 0.01, 1.292), 0.205, (1.0, 1.0, 0.15), G_BACK, 14)
+    ball('basket', (0, 0.265, 0.88), 0.185, (1.0, 0.60, 1.10), G_BACK, 12)
+    ball('basket_in', (0, 0.365, 0.88), 0.135, (1.0, 0.5, 1.0), G_BACK, 10)
+    ball('rope', (0, 0.400, 0.94), 0.100, (1.15, 0.35, 0.55), G_BACK, 10)
+    box('strap_l', (-0.150, 0.14, 0.90), (0.07, 0.24, 0.10), G_BACK, 0.02)
+    box('strap_r', (0.150, 0.14, 0.90), (0.07, 0.24, 0.10), G_BACK, 0.02)
+    cone('gun_stock', (0.31, 0.27, 0.42), (0.15, 0.36, 0.86), 0.045, 0.036, G_BACK, 8)
+    cone('gun_barrel', (0.14, 0.365, 0.84), (-0.10, 0.40, 1.30), 0.024, 0.020, G_BACK, 8)
+    box('gun_lock', (0.15, 0.385, 0.84), (0.05, 0.03, 0.10), G_BACK, 0.01)
 
 # ---------------------------------------------------------------- join
 bpy.ops.object.select_all(action='DESELECT')
@@ -231,21 +225,21 @@ def bone(name, h, t, parent=None, connect=False):
         b.use_connect = connect
     return b
 
-bone('Hips', (0, 0, 0.92), (0, 0, 1.02))
-bone('Spine', (0, 0, 1.02), (0, 0, 1.20), 'Hips', True)
-bone('Chest', (0, 0, 1.20), (0, 0, 1.44), 'Spine', True)
-bone('Head', (0, 0, 1.46), (0, 0, 1.70), 'Chest')
+bone('Hips', (0, 0, HIPZ), (0, 0, 0.72))
+bone('Spine', (0, 0, 0.72), (0, 0, 0.84))
+bone('Chest', (0, 0, 0.84), (0, 0, CHEST_Z))
+bone('Head', (0, 0, 0.99), (0, 0, HEAD_Z + 0.12))
 for s, tag in ((-1, 'L'), (1, 'R')):
     sx = s * SHOULDER_X
-    bone('Shoulder.' + tag, (sx * 0.40, 0, 1.41), (sx, 0, 1.38), 'Chest')
-    bone('UpperArm.' + tag, (sx, 0, 1.38), (sx * 1.14, 0.01, 1.14), 'Shoulder.' + tag, True)
-    bone('ForeArm.' + tag, (sx * 1.14, 0.01, 1.14), (sx * 1.20, 0.02, 0.92), 'UpperArm.' + tag, True)
-    bone('Hand.' + tag, (sx * 1.20, 0.02, 0.92), (sx * 1.23, 0.02, 0.78), 'ForeArm.' + tag, True)
+    bone('Shoulder.' + tag, (sx * 0.40, 0, 0.96), (sx, 0, SHOULDER_Z), 'Chest')
+    bone('UpperArm.' + tag, (sx, 0, SHOULDER_Z), (sx * 1.10, 0.01, ELBOW_Z), 'Shoulder.' + tag, True)
+    bone('ForeArm.' + tag, (sx * 1.10, 0.01, ELBOW_Z), (sx * 1.16, 0.02, WRIST_Z), 'UpperArm.' + tag, True)
+    bone('Hand.' + tag, (sx * 1.16, 0.02, WRIST_Z), (sx * 1.19, 0.02, WRIST_Z - 0.13), 'ForeArm.' + tag, True)
 for s, tag in ((-1, 'L'), (1, 'R')):
-    sx = s * 0.105
-    bone('Thigh.' + tag, (sx, 0, 0.92), (sx, 0, 0.52), 'Hips')
-    bone('Shin.' + tag, (sx, 0, 0.52), (sx, 0, 0.12), 'Thigh.' + tag, True)
-    bone('Foot.' + tag, (sx, 0, 0.12), (sx, 0.17, 0.05), 'Shin.' + tag, True)
+    sx = s * 0.115
+    bone('Thigh.' + tag, (sx, 0, HIPZ), (sx, 0, KNEE), 'Hips')
+    bone('Shin.' + tag, (sx, 0, KNEE), (sx, 0, ANKLE), 'Thigh.' + tag, True)
+    bone('Foot.' + tag, (sx, 0, ANKLE), (sx, 0.16, 0.05), 'Shin.' + tag, True)
 
 bpy.ops.object.mode_set(mode='OBJECT')
 
@@ -256,7 +250,7 @@ bpy.context.view_layer.objects.active = rig
 bpy.ops.object.parent_set(type='ARMATURE_AUTO')
 body.parent = rig
 
-# ---- 刚性装备固定: 枪/背篓/帽/工具 整体绑到单根骨骼, 动画时绝不散架 ----
+# ---- 刚性装备: 整件锁到单根骨骼，动画时绝不散架 ----
 RIGID = {'g_back': 'Chest', 'g_belt': 'Hips', 'g_head': 'Head'}
 def lock_rigid(mat_name, bone_name):
     me = body.data
@@ -282,7 +276,7 @@ for mname, bname in RIGID.items():
     locked += lock_rigid(mname, bname)
 print('[char] rigid verts locked: %d' % locked)
 
-# ---------------------------------------------------------------- anim helpers
+# ---------------------------------------------------------------- anim
 def setpose(rot=None, loc=None, frame=0):
     if loc:
         rig.location = loc
@@ -295,7 +289,6 @@ def setpose(rot=None, loc=None, frame=0):
             pb.keyframe_insert('rotation_euler', frame=frame)
 
 def new_action(name):
-    """start a fresh action on the rig (Blender 4.4+ slotted actions)"""
     rig.animation_data_create()
     act = bpy.data.actions.new(name)
     rig.animation_data.action = None
@@ -304,110 +297,106 @@ def new_action(name):
         rig.animation_data.action = act
         rig.animation_data.action_slot = slot
     except Exception as e:
-        print('[char] slot api failed (%s) -> fallback' % e)
+        print('[char] slot api failed (%s)' % e)
         rig.animation_data.action = act
     return act
 
 CLIPS = []
-
 def D(deg):
     return math.radians(deg)
 
-# --- Idle : breathing + weight shift
+# --- Idle
 new_action('Idle')
-for f, amp, sh in ((1, 0.0, 0.0), (24, 1.0, 1.0), (48, 0.0, 0.0), (72, 1.0, -1.0), (96, 0.0, 0.0)):
+for f, amp, sh in ((1, 0.0, 0.0), (20, 1.0, 1.0), (40, 0.0, 0.0), (60, 1.0, -1.0), (80, 0.0, 0.0)):
     setpose(rot={
-        'Spine': (D(2 * amp), 0, 0),
-        'Chest': (D(3 * amp), 0, 0),
-        'Head': (D(-2 * amp), D(3 * sh), 0),
-        'Shoulder.L': (0, 0, D(-4 * amp)),
-        'Shoulder.R': (0, 0, D(4 * amp)),
-        'UpperArm.L': (D(-6 * amp), 0, D(-6)),
-        'UpperArm.R': (D(-6 * amp), 0, D(6)),
-        'ForeArm.L': (D(-14), 0, 0),
-        'ForeArm.R': (D(-14), 0, 0),
-        'Hips': (0, 0, D(1.5 * sh)),
+        'Spine': (D(3 * amp), 0, 0),
+        'Chest': (D(4 * amp), 0, 0),
+        'Head': (D(-3 * amp), D(5 * sh), 0),
+        'Shoulder.L': (0, 0, D(-6 * amp)),
+        'Shoulder.R': (0, 0, D(6 * amp)),
+        'UpperArm.L': (D(-8 * amp), 0, D(-8)),
+        'UpperArm.R': (D(-8 * amp), 0, D(8)),
+        'ForeArm.L': (D(-18), 0, 0),
+        'ForeArm.R': (D(-18), 0, 0),
+        'Hips': (0, 0, D(2 * sh)),
     }, loc=(0, 0, 0.0), frame=f)
 CLIPS.append('Idle')
 
-# --- Walk : 32 frame cycle (0,8,16,24,32)
+# --- Walk : 짧은 다리에 걸맞게 각도 조정
 new_action('Walk')
-swing = 34.0
+swing = 40.0
 for f, s, up in ((1, 1, 0), (9, 0, 1), (17, -1, 0), (25, 0, -1), (33, 1, 0)):
     setpose(rot={
-        'Hips': (D(2), D(2 * s), 0),
-        'Spine': (D(3), 0, D(-2 * s)),
-        'Chest': (D(2), D(-3 * s), 0),
-        'Head': (D(-3), 0, 0),
+        'Hips': (D(3), D(3 * s), 0),
+        'Spine': (D(4), 0, D(-3 * s)),
+        'Chest': (D(3), D(-4 * s), 0),
+        'Head': (D(-4), 0, 0),
         'Thigh.L': (D(-s * swing), 0, 0),
-        'Shin.L': (D(max(0, s) * 42 + 6), 0, 0),
-        'Foot.L': (D(-max(0, s) * 16 + (up * 10)), 0, 0),
+        'Shin.L': (D(max(0, s) * 50 + 8), 0, 0),
+        'Foot.L': (D(-max(0, s) * 18 + (up * 12)), 0, 0),
         'Thigh.R': (D(s * swing), 0, 0),
-        'Shin.R': (D(max(0, -s) * 42 + 6), 0, 0),
-        'Foot.R': (D(-max(0, -s) * 16 - (up * 10)), 0, 0),
-        'UpperArm.L': (D(s * 24), 0, D(-5)),
-        'UpperArm.R': (D(-s * 24), 0, D(5)),
-        'ForeArm.L': (D(-18 - max(0, s) * 16), 0, 0),
-        'ForeArm.R': (D(-18 - max(0, -s) * 16), 0, 0),
-    }, loc=(0, 0, abs(s) * 0.0), frame=f)
+        'Shin.R': (D(max(0, -s) * 50 + 8), 0, 0),
+        'Foot.R': (D(-max(0, -s) * 18 - (up * 12)), 0, 0),
+        'UpperArm.L': (D(s * 30), 0, D(-7)),
+        'UpperArm.R': (D(-s * 30), 0, D(7)),
+        'ForeArm.L': (D(-22 - max(0, s) * 18), 0, 0),
+        'ForeArm.R': (D(-22 - max(0, -s) * 18), 0, 0),
+    }, loc=(0, 0, 0), frame=f)
 CLIPS.append('Walk')
 
-# --- Attack : wind-up -> thrust -> recover (frames 1..36)
+# --- Attack
 new_action('Attack')
-KEYS = [
-    (1,  0, 0, 0), (10, -55, 0, 10), (18, -70, 0, -18), (24, 75, 0, 5), (30, 30, 0, 0), (36, 0, 0, 0),
-]
-for f, ua, chest, hz in KEYS:
+for f, ua, chest, hz in ((1, 0, 0, 0), (10, -60, 0, 12), (18, -78, 0, -20),
+                         (24, 85, 0, 6), (30, 34, 0, 0), (36, 0, 0, 0)):
     setpose(rot={
-        'Chest': (D(-6 - chest * 0.2), 0, D(-hz * 0.6)),
-        'Spine': (D(4), 0, D(-hz * 0.4)),
-        'Head': (D(2), 0, D(hz * 0.4)),
+        'Chest': (D(-7 - chest * 0.2), 0, D(-hz * 0.6)),
+        'Spine': (D(5), 0, D(-hz * 0.4)),
+        'Head': (D(3), 0, D(hz * 0.4)),
         'Hips': (0, 0, D(hz * 0.5)),
-        'UpperArm.R': (D(ua), 0, D(-8)),
-        'ForeArm.R': (D(-10 if ua > 0 else -55), 0, 0),
-        'UpperArm.L': (D(-18), 0, D(-14)),
-        'ForeArm.L': (D(-40), 0, 0),
-        'Thigh.L': (D(-10), 0, 0), 'Thigh.R': (D(10), 0, 0),
+        'UpperArm.R': (D(ua), 0, D(-10)),
+        'ForeArm.R': (D(-12 if ua > 0 else -60), 0, 0),
+        'UpperArm.L': (D(-22), 0, D(-16)),
+        'ForeArm.L': (D(-45), 0, 0),
+        'Thigh.L': (D(-12), 0, 0), 'Thigh.R': (D(12), 0, 0),
     }, loc=(0, 0, 0), frame=f)
 CLIPS.append('Attack')
 
-# --- Hit : recoil back
+# --- Hit
 new_action('Hit')
-for f, bk, hd in ((1, 0, 0), (6, -16, -18), (14, 10, 10), (26, 0, 0)):
+for f, bk, hd in ((1, 0, 0), (6, -18, -20), (14, 12, 12), (24, 0, 0)):
     setpose(rot={
         'Hips': (D(bk * 0.4), 0, 0),
         'Spine': (D(bk * 0.6), 0, 0),
         'Chest': (D(bk * 0.5), 0, 0),
         'Head': (D(hd * 0.8), 0, D(hd * 0.4)),
-        'UpperArm.L': (D(-30 - abs(hd)), 0, D(-22)),
-        'UpperArm.R': (D(-30 - abs(hd)), 0, D(22)),
-        'ForeArm.L': (D(-55), 0, 0), 'ForeArm.R': (D(-55), 0, 0),
-        'Thigh.L': (D(8), 0, 0), 'Thigh.R': (D(-6), 0, 0),
-    }, loc=(0, -abs(bk) * 0.012, 0), frame=f)
+        'UpperArm.L': (D(-34 - abs(hd)), 0, D(-26)),
+        'UpperArm.R': (D(-34 - abs(hd)), 0, D(26)),
+        'ForeArm.L': (D(-60), 0, 0), 'ForeArm.R': (D(-60), 0, 0),
+        'Thigh.L': (D(10), 0, 0), 'Thigh.R': (D(-8), 0, 0),
+    }, loc=(0, -abs(bk) * 0.010, 0), frame=f)
 CLIPS.append('Hit')
 
-# --- Shipwreck (stage 0) : 웅크린 자세 + 추위에 떨림
+# --- Shipwreck (stage 0)
 if STAGE == 0:
     new_action('Shipwreck')
     for f, sh in ((1, 0.0), (13, 1.0), (25, -1.0), (37, 0.4), (49, -0.4), (61, 0.0)):
         setpose(rot={
-            'Hips': (D(10), 0, 0),
-            'Spine': (D(16), 0, 0),
-            'Chest': (D(12), 0, 0),
-            'Head': (D(14), 0, 0),                      # 고개를 숙인다
-            'UpperArm.L': (D(-52), 0, D(-34)),
-            'UpperArm.R': (D(-52), 0, D(34)),
-            'ForeArm.L': (D(-96), 0, D(-16)),            # 팔을 가슴에 감싼다
-            'ForeArm.R': (D(-96), 0, D(16)),
-            'Thigh.L': (D(-12), 0, D(-4)),
-            'Thigh.R': (D(-12), 0, D(4)),
-            'Shin.L': (D(24), 0, 0), 'Shin.R': (D(24), 0, 0),
-        }, loc=(0, 0, sh * 0.006), frame=f)
+            'Hips': (D(12), 0, 0),
+            'Spine': (D(18), 0, 0),
+            'Chest': (D(14), 0, 0),
+            'Head': (D(16), 0, 0),
+            'UpperArm.L': (D(-58), 0, D(-38)),
+            'UpperArm.R': (D(-58), 0, D(38)),
+            'ForeArm.L': (D(-105), 0, D(-18)),
+            'ForeArm.R': (D(-105), 0, D(18)),
+            'Thigh.L': (D(-14), 0, D(-5)),
+            'Thigh.R': (D(-14), 0, D(5)),
+            'Shin.L': (D(28), 0, 0), 'Shin.R': (D(28), 0, 0),
+        }, loc=(0, 0, sh * 0.005), frame=f)
     CLIPS.append('Shipwreck')
 
-# park every clip on its own NLA track so the glTF exporter emits 4 animations
+# ---------------------------------------------------------------- NLA + export
 ad = rig.animation_data
-active = ad.action
 ad.action = None
 tracks = []
 for name in CLIPS:
@@ -424,7 +413,6 @@ for name in CLIPS:
     tracks.append(tr)
 print('[char] nla tracks: %s' % [t.name for t in tracks])
 
-# ---------------------------------------------------------------- export
 bpy.ops.object.select_all(action='SELECT')
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 kw = dict(filepath=OUT, export_format='GLB', export_apply=True, export_yup=True,
@@ -434,4 +422,4 @@ try:
 except TypeError:
     bpy.ops.export_scene.gltf(**kw)
 tris = sum(len(o.data.polygons) for o in bpy.data.objects if o.type == 'MESH')
-print('[char] saved %s  stage=%d  faces=%d  clips=%s' % (OUT, STAGE, tris, CLIPS))
+print('[char] saved %s  stage=%d  faces=%d  h=%.2f  clips=%s' % (OUT, STAGE, tris, TOP, CLIPS))
