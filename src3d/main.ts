@@ -35,10 +35,51 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a1a2a);
-scene.fog = new THREE.Fog(0x0a1a2a, 90, 240);
+scene.background = new THREE.Color(0x8fd0ef);
+scene.fog = new THREE.Fog(0x9fdcf5, 120, 460);
 
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 800);
+/** 하늘 돔 — 지평선(아래는 바다색)부터 하늘색까지 그라디언트 */
+const SKY = new THREE.Mesh(
+  new THREE.SphereGeometry(700, 24, 16),
+  new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    fog: false,
+    uniforms: {
+      top: { value: new THREE.Color(0x2f7fc4) },
+      mid: { value: new THREE.Color(0x9fdcf5) },
+      bottom: { value: new THREE.Color(0xdff2fb) },
+    },
+    vertexShader: `varying float vy; void main(){ vy = normalize(position).y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `
+      uniform vec3 top, mid, bottom; varying float vy;
+      void main(){
+        float h = clamp(vy * 0.5 + 0.5, 0.0, 1.0);
+        vec3 c = h < 0.5 ? mix(bottom, mid, h * 2.0) : mix(mid, top, (h - 0.5) * 2.0);
+        gl_FragColor = vec4(c, 1.0);
+      }`,
+  }),
+);
+SKY.renderOrder = -1000;
+scene.add(SKY);
+
+/** 바다는 지평선까지 — 섬 GLB 의 68×68 물판은 이 아래에 묻힌다 */
+const OCEAN = (() => {
+  const g = new THREE.PlaneGeometry(900, 900, 1, 1);
+  g.rotateX(-Math.PI / 2);
+  const m = new THREE.MeshToonMaterial({ color: 0x1f7fc4, gradientMap: (() => {
+    const s = new Uint8Array([110, 165, 215, 255]);
+    const t = new THREE.DataTexture(s, s.length, 1, THREE.RedFormat);
+    t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t;
+  })() });
+  const mesh = new THREE.Mesh(g, m);
+  mesh.position.set(WORLD / 2, -0.06, WORLD / 2);
+  mesh.renderOrder = -900;
+  scene.add(mesh);
+  return mesh;
+})();
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 2000);
 const CLOSE_UP = new URLSearchParams(location.search).has('stage');
 const CX = WORLD / 2, CZ = WORLD / 2;
 if (CLOSE_UP) {
@@ -53,7 +94,7 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 // 맵 고정 + 줌인아웃 (18-15)
 controls.minDistance = 18;
-controls.maxDistance = 120;
+controls.maxDistance = 150;
 // CoC 규칙: 맵은 고정. 팬(맵 이동) 금지 — 확대해도 섬이 화면 중앙에 남는다
 controls.enablePan = false;
 // 지평선 아래로 안 내려간다 — 항상 "지도 보는 각도"를 유지
@@ -278,6 +319,55 @@ gltf.load(`/glb/robinson_s${startStage}.glb`, (g) => {
   play(clips.some((c) => c.name === 'Walk') ? 'Walk' : clips[0]?.name ?? 'Idle');
 }, undefined, (err) => { console.warn('[hero]', err); });
 
+// ---------- 자원 노드 배치 (8종 3D 프롭) ----------
+let propsRoot: THREE.Object3D | null = null;
+const propTemplates = new Map<string, THREE.Object3D>();
+const propNodes: { kind: string; x: number; z: number; y: number; obj: THREE.Object3D }[] = [];
+
+const PROP_KINDS = ['tree', 'palm', 'berry', 'shell', 'rock', 'ore', 'tar', 'crystal'];
+gltf.load('/glb/props3d.glb', (g) => {
+  propsRoot = g.scene;
+  // 1) 툰 + 외곽선 (복제본이 함께 따라가도록 먼저)
+  cocify([propsRoot], 0.012);
+  // 2) 종류 노드를 템플릿으로 등록 (Blender join 이 여러 메쉬로 쪼개므로 노드 이름 기준)
+  propsRoot.traverse((o) => {
+    const n = (o.name || '').toLowerCase();
+    if (PROP_KINDS.includes(n)) propTemplates.set(n, o);
+  });
+  propsRoot.visible = false;
+  scene.add(propsRoot);
+  spawnNodes();
+  (window as unknown as { __props?: unknown }).__props = { propNodes, propTemplates };
+}, undefined, (err) => { console.warn('[props]', err); });
+
+let nodesSpawned = false;
+function spawnNodes() {
+  if (!propsRoot || !RULES || !groundMeshes.length) return;   // 아직 준비 안 됨 → 나중에 재시도
+  nodesSpawned = true;
+  const data = (RULES as unknown as { nodes: { kind: string; x: number; y: number }[] }).nodes;
+  let i = 0;
+  for (const n of data) {
+    const tpl = propTemplates.get(n.kind);
+    if (!tpl) continue;
+    const wx = n.x / 32, wz = n.y / 32;              // 게임 좌표 → 월드
+    const gy = groundAt(wx, wz);
+    if (gy === null) continue;
+    const inst = tpl.clone(true);
+    inst.position.set(wx, gy - 0.04, wz);
+    inst.rotation.y = (i * 2.399) % (Math.PI * 2);  // 황금각으로 자연스러운 회전
+    const s = 0.88 + ((i * 37) % 24) / 100;          // 0.88 ~ 1.12 크기 흔들림
+    inst.scale.setScalar(s);
+    inst.visible = true;
+    scene.add(inst);
+    propNodes.push({ kind: n.kind, x: wx, z: wz, y: gy, obj: inst });
+    i++;
+  }
+  const counts: Record<string, number> = {};
+  for (const p of propNodes) counts[p.kind] = (counts[p.kind] ?? 0) + 1;
+  (window as unknown as { __propCounts?: unknown }).__propCounts = counts;
+  console.log('[props] placed', propNodes.length, JSON.stringify(counts));
+}
+
 // ---------- 지형 위에서 걷기 (레이캐스트로 높이 샘플) ----------
 const ray = new THREE.Raycaster();
 const down = new THREE.Vector3(0, -1, 0);
@@ -289,6 +379,7 @@ interface IslandRules {
   map: number; spawn: { x: number; y: number };
   mesas: { cx: number; cy: number; R: number; top: number }[];
   terrain: string | null; hasRiver: boolean;
+  nodes: { kind: string; x: number; y: number }[];
   elev: Float32Array; steep: Uint8Array; ramp: Uint8Array;
 }
 let RULES: IslandRules | null = null;
@@ -307,10 +398,11 @@ function loadRules(seed: string) {
       RULES = {
         map, spawn: j.spawn, mesas: j.mesas ?? [],
         terrain: j.terrain, hasRiver: j.hasRiver,
+        nodes: j.nodes ?? [],
         elev: dec(j.elev, Float32Array), steep: dec(j.steep, Uint8Array), ramp: dec(j.ramp, Uint8Array),
       };
       (window as unknown as { __rules?: IslandRules }).__rules = RULES;
-      // 해변 스폰 지점에 세운다
+      spawnNodes();                                  // 노드 배치(프롭 로드 대기 중이면 자동)
       if (hero) placeAtSpawn();
     })
     .catch((e) => { console.warn('[rules]', e); });
@@ -370,12 +462,14 @@ function groundAt(x: number, z: number): number | null {
 let placed = false;
 /** 섬 · 생존자 · 규칙이 모두 준비되면 해변 스폰에 배치 */
 function maybePlace() {
+  if (!nodesSpawned) spawnNodes();      // 섬 로드 완료 후 노드 배치 재시도
   if (placed || !hero || !groundMeshes.length || !RULES) return;
   placeAtSpawn();
   if (grounded) placed = true;
 }
 
 function stepHero(dt: number) {
+  if (!nodesSpawned) spawnNodes();
   if (!hero) return;
   if (!placed) { maybePlace(); return; }
   if (!grounded) {
