@@ -51,13 +51,17 @@ const controls = new OrbitControls(camera, canvas);
 controls.target.set(CX, CLOSE_UP ? 1.0 : 0, CZ);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
-// 맵 고정 + 줌인아웃 (18-15): 카메라는 맵 위를 오가며 확대/축소만 한다
+// 맵 고정 + 줌인아웃 (18-15)
 controls.minDistance = 18;
 controls.maxDistance = 120;
+// CoC 규칙: 맵은 고정. 팬(맵 이동) 금지 — 확대해도 섬이 화면 중앙에 남는다
+controls.enablePan = false;
+// 지평선 아래로 안 내려간다 — 항상 "지도 보는 각도"를 유지
+controls.maxPolarAngle = Math.PI * 0.42;
+controls.minPolarAngle = Math.PI * 0.10;
 // ---- 360° 자유 회전: 지면 아래로만 못 내려감 (0° = 정수평, 90° = 수평)
-controls.maxPolarAngle = Math.PI * 0.495;
-controls.minPolarAngle = 0.0;
-controls.enablePan = true;
+controls.maxPolarAngle = Math.PI * 0.42;
+controls.minPolarAngle = Math.PI * 0.10;
 controls.screenSpacePanning = false;
 controls.rotateSpeed = 0.85;
 controls.zoomSpeed = 0.9;
