@@ -21,6 +21,7 @@ export class Player extends Combatant {
   private bobT = 0;
   private weaponImg: Phaser.GameObjects.Image;
   private nodes: () => ResourceNode[];
+  private skinApplied = false;   // 첫 적용 때는 배너를 띄우지 않는다
 
   constructor(ctx: WorldCtx, x: number, y: number, nodes: () => ResourceNode[]) {
     super(ctx, x, y, { radius: 13, hp: PLAYER_HP, faction: 'player', tex: 'player', barY: -66 });
@@ -41,18 +42,18 @@ export class Player extends Combatant {
   }
 
   /**
-   * 생존자 진화 — 도구 단계(1~5)에 따라 외형이 표류 → 개척 → 수정 → 동력 → 지배자로 바뀐다.
-   * (u_player1~5.png 가 없으면 u_player 로 폴백)
+   * 생존자 진화 — 도구 단계(1~5)에 따라 표류 → 개척 → 수정 → 동력 → 지배자로 바뀐다.
+   * 외형 그림은 3장(난파 · 1일차 · 적응완료)이고 단계가 오르면 상태가 넘어간다.
+   * (해당 텍스처가 없으면 u_player 로 폴백)
    */
   syncSkin(announce = false) {
     const tier = Math.max(1, Math.min(5, Math.max(familyTier('wood'), familyTier('stone'), familyTier('oil'))));
     const skin = PLAYER_SKINS[tier - 1];
     const tex = this.ctx.scene.textures.exists(skin.tex) ? skin.tex : 'u_player';
-    if (this.art.texture.key === tex) return;
-    const first = this.art.texture.key !== 'u_player' && !this.art.texture.key.startsWith('u_player');
+    if (this.art.texture.key === tex) { this.skinApplied = true; return; }
     this.art.setTexture(tex);
     this.art.setScale(this.art.scaleX, this.art.scaleY);   // 새 텍스처 크기에 맞춰 스케일 유지
-    if (announce && !first) {
+    if (announce && this.skinApplied) {
       const sc = this.ctx.scene;
       sc.tweens.add({ targets: this.art, scaleX: this.art.scaleX * 1.35, scaleY: this.art.scaleY * 1.35, yoyo: true, duration: 260 });
       burst(sc, this.x, this.y - 20, 'fx_spark', 26, {
@@ -61,6 +62,7 @@ export class Player extends Combatant {
       });
       bus.emit(EV.BANNER, { title: `${skin.stage}의 생존자`, sub: skin.desc, icon: '✨' });
     }
+    this.skinApplied = true;
   }
 
   setMoveVector(x: number, y: number) {

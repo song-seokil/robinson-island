@@ -184,7 +184,8 @@ export function generateIsland(seed: number): IslandData {
 // 이게 "전략"의 뼈대다: 물길 = 자연 병목, 여울 = 우리가 통제하는 지점
 const riverDepth = new Float32Array(MAP_TILES * MAP_TILES);
 let hasRiver = false;
-if (rng.next() < 0.55) {
+  // 협곡 섬은 '마른 골짜기' — 강까지 있으면 골짜기가 2개라 지도가 안 읽힌다 (18-13)
+  if (terrain.id !== 'canyon' && rng.next() < 0.55) {
   hasRiver = true;
   const dir = rng.next() * Math.PI;
   const dx = Math.cos(dir), dy = Math.sin(dir);
@@ -285,7 +286,13 @@ if (rng.next() < 0.55) {
     }
   }
 
-  // 봉우리 — 고원 위 산 (고도 상한을 넘지 않게)
+  // ---- 메사(산) — 최대 2개 (18-13)
+  //  · 정상은 **평평하다** → 그 위에 성/방어기물을 짓는다
+  //  · 접지부에 **암벽 링 1줄** → 자연 성벽(전 규격 통과 불가). 입구는 계간뿐
+  //  · 뾰족한 봉우리는 없다 — 원반형이라 360° 어느 쪽에서나 같은 성
+  const mesaTop = new Uint8Array(MAP_TILES * MAP_TILES);   // 정상면(완전 평지)
+  const protect = new Uint8Array(MAP_TILES * MAP_TILES);   // 평탄화/경사판정 제외 구역
+  const mesas: { cx: number; cy: number; R: number; top: number }[] = [];
   {
     const cand: { x: number; y: number; v: number }[] = [];
     for (let y = 2; y < MAP_TILES - 2; y++) {
@@ -307,20 +314,41 @@ if (rng.next() < 0.55) {
     cand.sort((a, b) => b.v - a.v);
     const chosen: typeof cand = [];
     for (const p of cand) {
-      if (chosen.length >= 4) break;
-      if (chosen.every((q) => Math.hypot(q.x - p.x, q.y - p.y) > 12)) chosen.push(p);
+      if (chosen.length >= 2) break;                                   // 산은 최대 2개 — 그 이상은 방해
+      if (chosen.every((q) => Math.hypot(q.x - p.x, q.y - p.y) > 18)) chosen.push(p);
     }
     for (const p of chosen) {
-      const amp = 0.55 + 0.75 * Math.max(0, Math.min(1, (p.v - 0.82) / 0.18));
-      const sig = 1.6, R = Math.ceil(sig * 2.2);
+      const R = Math.round(6 + rng.next() * 3);                          // 정상 반경 6~8타일
+      let local = 0;
       for (let dy = -R; dy <= R; dy++) {
         for (let dx = -R; dx <= R; dx++) {
           const x = p.x + dx, y = p.y + dy;
           if (x < 0 || y < 0 || x >= MAP_TILES || y >= MAP_TILES) continue;
-          const d2 = dx * dx + dy * dy;
-          elevH[idx(x, y)] += amp * Math.exp(-d2 / (2 * sig * sig));
+          local = Math.max(local, elevH[idx(x, y)]);
         }
       }
+      const top = Math.min(MAX_ELEV - 0.15, Math.max(local + 0.75, 0.95));  // 확실히 높아야 암벽이 성벽이 된다
+      const edgeTop = Math.max(local + 0.75, 0.95) - (STEP_MAX + 0.18);      // 링 바깥 = 반드시 못 오르는 높이
+      for (let dy = -(R + 3); dy <= R + 3; dy++) {
+        for (let dx = -(R + 3); dx <= R + 3; dx++) {
+          const x = p.x + dx, y = p.y + dy;
+          if (x < 0 || y < 0 || x >= MAP_TILES || y >= MAP_TILES) continue;
+          const i = idx(x, y);
+          if (isWater(tiles[i])) continue;
+          const d = Math.hypot(dx, dy);
+          if (d <= R) {
+            // 정상: 아주 완만하게만 흔들린다 (FLAT_MAX 안) → 마음껏 지을 수 있다
+            elevH[i] = Math.max(elevH[i], top + (bump.fbm(x / MAP_TILES * 3, y / MAP_TILES * 3, 2, 0.5, 2) - 0.5) * 0.10);
+            mesaTop[i] = 1; protect[i] = 1;
+          } else if (d <= R + 2) {
+            // 접지부 암벽 링 — 여기가 자연 성벽
+            const w = (d - R) / 2;
+            elevH[i] = Math.min(elevH[i], edgeTop + w * 0.18);
+            protect[i] = 1;
+          }
+        }
+      }
+      mesas.push({ cx: p.x, cy: p.y, R, top });
     }
   }
   for (let i = 0; i < elevH.length; i++) if (elevH[i] > MAX_ELEV) elevH[i] = MAX_ELEV;
@@ -449,16 +477,40 @@ if (rng.next() < 0.55) {
         const d = Math.abs(dx * any_ - dy * anx + off);          // 중심선까지 거리(타일)
         if (d > 3.6) continue;
         const w = 1 - sstep(1.0, 3.6, d);                        // 골짜기 바닥 폭 ≈ 2타일
-        const bottom = 0.12 + d * 0.30;
+        const bottom = 0.12 + d * 0.12;                          // 바닥은 평평하게 (큰 장난감도 통과)
         elevH[i] = elevH[i] * (1 - w) + Math.min(elevH[i], bottom) * w;
       }
     }
   } else if (terrain.id === 'terrace') {
-    const stepH = 0.55;   // 한 단 높이 — 걸어 올라갈 수 있는 완만한 계단
+    const stepH = 0.30;   // 한 단 높이 — 큰 장난감까지 오를 수 있는 완만한 계단 (18-13)
     for (let i = 0; i < elevH.length; i++) {
       if (elevH[i] <= 0.45) continue;                 // 평지는 그대로 (전체 타일링 방지)
       const q = Math.round(elevH[i] / stepH) * stepH;
       elevH[i] = elevH[i] + (q - elevH[i]) * 0.7;     // 70%만 단화 → 계단처럼 보이지만 급하지 않게
+    }
+  }
+
+  // ---- 급경사 금지 (18-13): 접지부 암벽을 제외한 모든 단차를 ROAD_MAX 이하로 평탄화 ----
+//  · "위에서부터 보이는 섬" — 어느 방향에서 봐도 완만하고, 성벽은 의도된 한 줄뿐
+  {
+    const NB: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    const cap = TERRAIN.ROAD_MAX - 0.01;
+    for (let pass = 0; pass < 32; pass++) {
+      let moved = 0;
+      for (let y = 1; y < MAP_TILES - 1; y++) {
+        for (let x = 1; x < MAP_TILES - 1; x++) {
+          const i = idx(x, y);
+          if (protect[i] || isWater(tiles[i])) continue;
+          for (const [dx, dy] of NB) {
+            const ni = idx(x + dx, y + dy);
+            if (protect[ni] || isWater(tiles[ni])) continue;
+            const d = elevH[i] - elevH[ni];
+            if (d > cap) { const f = (d - cap) * 0.5; elevH[i] -= f; elevH[ni] += f; moved++; }
+            else if (d < -cap) { const f = (-d - cap) * 0.5; elevH[i] += f; elevH[ni] -= f; moved++; }
+          }
+        }
+      }
+      if (!moved) break;
     }
   }
 
@@ -467,6 +519,7 @@ if (rng.next() < 0.55) {
     for (let x = 0; x < MAP_TILES; x++) {
       const i = idx(x, y);
       if (tiles[i] === T.WATER || tiles[i] === T.WATER_DEEP) { steep[i] = 1; continue; }
+      if (mesaTop[i]) { steep[i] = 0; continue; }        // 정상면 = 평평하므로 항상 걸어갈 수 있다
       let bad = 0;
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]) {
         const nx = x + dx, ny = y + dy;

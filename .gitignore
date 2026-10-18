@@ -19,3 +19,5 @@ tools/blender/out/
 Thumbs.db
 desktop.ini
 install.log
+# 원본 캐릭터 마스터(2528px) - 게임은 public/char 의 512px 만 사용
+tools/assets/character/

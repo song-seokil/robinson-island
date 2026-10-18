@@ -11,8 +11,8 @@ export const PRE_RENDERED_PROPS = [
   'n_tree', 'n_palm', 'n_bush', 'n_berry', 'n_rock', 'n_ore', 'n_crystal', 'n_tar',
   'b_campfire', 'b_wall', 'b_tower', 'b_spikes', 'b_hut', 'b_raft', 'b_chest',
   'u_player', 'u_sword', 'u_archer', 'u_bomber', 'u_boss', 'u_boar',
-  // 생존자 진화 단계별 외형 (없으면 u_player 로 폴백)
-  'u_player1', 'u_player2', 'u_player3', 'u_player4', 'u_player5',
+  // 생존자 3상태 (난파 → 1일차 → 적응완료). 없으면 u_player 로 폴백
+  'robinson_wreck', 'robinson_day1', 'robinson_settled',
 ] as const;
 
 /** 프리렌더된 섬 지도 — 시드별 PNG (없으면 게임이 절차적으로 그림을 그린다) */
