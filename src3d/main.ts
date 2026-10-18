@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 로빈슨의 섬 — 3D 버전 부트스트랩
  *  · 섬은 Blender 3D 렌더 → GLB(Draco) 로 들어온다 (public/glb/island_<seed>.glb)
  *  · 좌표 규약: 지상 좌표(x, y) = 월드(X, Z), 1타일 = 32px → 게임 좌표 / 32
@@ -11,6 +11,7 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { AnimationMixer } from 'three';
 import dracoWasm from 'three/examples/jsm/libs/draco/draco_decoder.wasm?url';
 import dracoJs from 'three/examples/jsm/libs/draco/draco_wasm_wrapper.js?url';
+import { BUILD_SKILLS, BUILD_MAX, START_SKILLS, FREE_BUILDS, BuildSkillDef } from '../src/core/config';
 
 // ---------- 월드 규약 ----------
 export const TILE = 32;
@@ -286,7 +287,8 @@ function play(name: string, loop = true) {
   if (!loop) act.setLoop(THREE.LoopOnce, 1);
   act.clampWhenFinished = !loop;
   current = name;
-  status.textContent = `로빈슨 · ${name === 'Walk' ? '이동' : name === 'Attack' ? '작업' : '대기'}`;
+  // 상태 메시지는 여기서 건드리지 않는다 — 애니메이션이 매 프레임 상태줄을 덮어써서
+  // "채집 지시!" 같은 피드백이 1초도 못 사는 문제가 있었다. (18-20)
 }
 
 // 생존자 3상태 — 0 난파 / 1 1일차 / 2 적응완료
@@ -350,6 +352,28 @@ function spawnNodes() {
   for (const p of propNodes) counts[p.kind] = (counts[p.kind] ?? 0) + 1;
   (window as unknown as { __propCounts?: unknown }).__propCounts = counts;
   console.log('[props] placed', propNodes.length, JSON.stringify(counts));
+  restoreBuildings();
+}
+
+/** 18-19: 저장해둔 건물을 되살린다 — 그래야 수량 제한이 다음 날에도 유지된다 */
+function restoreBuildings() {
+  if (!savedBuilds.length) return;
+  let n = 0;
+  for (const b of savedBuilds) {
+    const tpl = propTemplates.get(b.kind);
+    if (!tpl) continue;
+    const gy = groundAt(b.x, b.z);
+    if (gy === null) continue;
+    const inst = tpl.clone(true);
+    inst.position.set(b.x, gy, b.z);
+    inst.rotation.y = (b.x * 1.7 + b.z * 2.3) % (Math.PI * 2);
+    inst.visible = true;
+    scene.add(inst);
+    built.push({ kind: b.kind, x: b.x, z: b.z, obj: inst });
+    n++;
+  }
+  savedBuilds = [];
+  if (n) { paintBuildMenu(); console.log('[builds] restored', n); }
 }
 
 // ---------- 인벤토리 + 채집 (게임의 심장) ----------
@@ -372,6 +396,10 @@ const YIELD: Record<string, ItemKey[]> = {
 const SAVE_KEY = 'robinson3d_v1';
 const inv: Record<ItemKey, number> = { wood: 0, stone: 0, food: 0, oil: 0, crystal: 0 };
 let harvested = 0;
+// 18-19: 배운 스킬 · 세운 건물(저장용)
+const learned = new Set<string>(START_SKILLS);
+const study = { id: null as string | null, t: 0 };
+let savedBuilds: { kind: string; x: number; z: number }[] = [];
 
 function loadSave() {
   try {
@@ -380,12 +408,23 @@ function loadSave() {
     const s = JSON.parse(raw);
     for (const k of Object.keys(inv) as ItemKey[]) inv[k] = s.inv?.[k] ?? 0;
     harvested = s.harvested ?? 0;
+    learned.clear();
+    for (const k of START_SKILLS) learned.add(k);
+    for (const id of s.learned ?? []) learned.add(id);
+    savedBuilds = (s.built ?? []) as { kind: string; x: number; z: number }[];
   } catch { /* 처음 실행 */ }
 }
 function saveGame() {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ inv, harvested, seed })); } catch { /* 무시 */ }
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      inv, harvested, seed,
+      learned: [...learned],
+      built: built.map((b) => ({ kind: b.kind, x: b.x, z: b.z })),
+    }));
+  } catch { /* 무시 */ }
 }
 loadSave();
+/** 저장된 건물을 되살린다 (수량 제한이 세션 사이에 유지되도록) */
 
 /** 무텍스트 규칙: 숫자만. 아이콘 + 개수 */
 const HUD = document.getElementById('inv') as HTMLDivElement;
@@ -478,7 +517,7 @@ const tasks: Task[] = [];
 let taskSeq = 0;
 const npc = {
   task: null as Task | null, state: 'idle' as 'idle' | 'walk' | 'work', timer: 0,
-  path: [] as { x: number; z: number }[], pi: 0, stuck: 0,
+  path: [] as { x: number; z: number }[], pi: 0, stuck: 0, saidIdle: 1,
 };
 
 /** 한 칸 이동 시도 (기존 이동 규칙 재사용) */
@@ -708,11 +747,16 @@ function npcTick(dt: number) {
   if (!npc.task) {
     const t = nearestIdleTask();
     if (t) {
-      npc.task = t; npc.state = 'walk'; npc.timer = 0; npc.pi = 0; npc.stuck = 0;
+      npc.task = t; npc.state = 'walk'; npc.timer = 0; npc.pi = 0; npc.stuck = 0; npc.saidIdle = 0;
       const tx = t.node ? t.node.x : t.x, tz = t.node ? t.node.z : t.z;
       npc.path = findPath(h.position.x, h.position.z, tx, tz) ?? [];
       if (!npc.path.length) status.textContent = '길이 없음…';
-    } else { npc.state = 'idle'; if (current === 'Walk') play('Idle'); return; }
+    } else {
+      npc.state = 'idle';
+      if (current === 'Walk') play('Idle');
+      if (!npc.saidIdle) { npc.saidIdle = 1; status.textContent = '로빈슨 · 대기'; }
+      return;
+    }
   }
   const t = npc.task!;
   const tx = t.node ? t.node.x : t.x, tz = t.node ? t.node.z : t.z;
@@ -771,7 +815,8 @@ function finishTask(t: Task) {
     t.node.obj.userData.dying = 0.001;
     status.textContent = `채집! (+${list.map((k) => ITEM[k].icon).join('')})`;
   } else if (t.type === 'build' && t.def) {
-    const chk = buildCheck(t.x, t.z, t.def.size);
+    const gate = buildGate(t.def);
+    const chk = gate ? { ok: false, y: 0, why: gate } : buildCheck(t.x, t.z, t.def.size, true);
     if (chk.ok && canAfford(t.def.cost)) {
       const tpl = propTemplates.get(t.def.kind);
       if (tpl) {
@@ -781,7 +826,8 @@ function finishTask(t: Task) {
         inst.visible = true;
         scene.add(inst);
         built.push({ kind: t.def.kind, x: t.x, z: t.z, obj: inst });
-        status.textContent = `${t.def.name} 완성!`;
+        paintBuildMenu();
+        status.textContent = `${t.def.name} 완성! (${countBuilt(t.def.kind)}/${t.def.max})`;
       }
     } else {
       status.textContent = `건설 실패 — ${chk.ok ? '재료 부족' : chk.why}`;
@@ -804,7 +850,7 @@ function demolishAt(wx: number, wz: number) {
       if (def) for (const k of Object.keys(def.cost) as ItemKey[]) inv[k] += Math.floor((def.cost[k] ?? 0) * 0.5);
       scene.remove(b.obj);
       built.splice(i, 1);
-      saveGame(); paintHUD();
+      saveGame(); paintHUD(); paintBuildMenu();
       status.textContent = '철거 (재료 50%)';
       return true;
     }
@@ -827,6 +873,8 @@ renderer.domElement.addEventListener('click', (ev) => {
   // 0) 건설 모드면 "지을 수 있는 빈땅" 이 최우선 — 나무가 클릭을 가로채지 못하게
   if (buildIdx >= 0) {
     const def = BUILDS[buildIdx];
+    const gate = buildGate(def);
+    if (gate) { status.textContent = gate; return; }
     const chk = p ? buildCheck(wx, wz, def.size, true) : { ok: false, y: 0, why: '맵 밖' };
     if (chk.ok) {
       if (!canAfford(def.cost)) { status.textContent = '재료 부족'; return; }
@@ -872,14 +920,97 @@ let orderReason = '';
 // ---------- 건설 (BUILD) ----------
 interface BuildDef {
   kind: string; name: string; icon: string; cost: Partial<Record<ItemKey, number>>; size: number;
+  max: number;                       // 18-19 섬 전체 수량 상한
 }
 const BUILDS: BuildDef[] = [
-  { kind: 'b_campfire', name: '모닥불', icon: '🔥', cost: { wood: 4, stone: 2 }, size: 1 },
-  { kind: 'b_hut', name: '오두막', icon: '🛖', cost: { wood: 12, stone: 4 }, size: 2 },
-  { kind: 'b_storage', name: '창고', icon: '📦', cost: { wood: 16, stone: 6 }, size: 2 },
-  { kind: 'b_wall', name: '울타리', icon: '🧱', cost: { wood: 6, stone: 2 }, size: 1 },
-  { kind: 'b_tower', name: '감시탑', icon: '🗼', cost: { wood: 20, stone: 14 }, size: 2 },
+  { kind: 'b_campfire', name: '모닥불', icon: '🔥', cost: { wood: 4, stone: 2 }, size: 1, max: BUILD_MAX.b_campfire },
+  { kind: 'b_hut', name: '오두막', icon: '🛖', cost: { wood: 12, stone: 4 }, size: 2, max: BUILD_MAX.b_hut },
+  { kind: 'b_storage', name: '창고', icon: '📦', cost: { wood: 16, stone: 6 }, size: 2, max: BUILD_MAX.b_storage },
+  { kind: 'b_wall', name: '울타리', icon: '🧱', cost: { wood: 6, stone: 2 }, size: 1, max: BUILD_MAX.b_wall },
+  { kind: 'b_tower', name: '감시탑', icon: '🗼', cost: { wood: 20, stone: 14 }, size: 2, max: BUILD_MAX.b_tower },
 ];
+
+// ============================================================
+//  18-19. 스킬북 — 건물은 "배워야" 지을 수 있다 (GDD 5장 12~13장 · 13-1)
+// ============================================================
+let bookOpen = false;
+
+const SKILL_BY_ID = new Map<string, BuildSkillDef>(BUILD_SKILLS.map((s) => [s.id, s]));
+/** 이 건물을 스킬북에서 배웠는가 (FREE_BUILDS 는 처음부터) */
+function isUnlocked(kind: string): boolean {
+  if (FREE_BUILDS.includes(kind)) return true;
+  return BUILD_SKILLS.some((s) => s.unlock.includes(kind) && learned.has(s.id));
+}
+/** 이 건물을 이미 다 세웠는가 (18-19 수량 제한) */
+function countBuilt(kind: string): number {
+  let n = 0;
+  for (const b of built) if (b.kind === kind) n++;
+  return n;
+}
+function atMax(b: BuildDef): boolean { return countBuilt(b.kind) >= b.max; }
+
+/** 공부 시작 — 선행 스킬이 배워져 있어야 한다 (9장 스킬트리) */
+function startStudy(s: BuildSkillDef): boolean {
+  if (learned.has(s.id) || study.id === s.id) return false;
+  if (s.prereq && !learned.has(s.prereq)) return false;
+  study.id = s.id; study.t = 0;
+  return true;
+}
+function tickStudy(dt: number) {
+  if (!study.id) return;
+  const s = SKILL_BY_ID.get(study.id);
+  if (!s) { study.id = null; return; }
+  study.t += dt;
+  if (study.t >= s.time) {
+    learned.add(s.id);
+    study.id = null; study.t = 0;
+    status.textContent = `${s.icon} ${s.name} 배웠다!`;
+    saveGame(); paintBuildMenu(); paintBook();
+  }
+}
+
+/** 스킬북 패널 (무텍스트 — 아이콘 + 숫자 + 자물쇠) */
+const BOOK = document.getElementById('book') as HTMLDivElement;
+function paintBook() {
+  if (!BOOK) return;
+  const BKM = document.getElementById('bookmenu');
+  if (BKM) BKM.classList.toggle('on', bookOpen);
+  BOOK.classList.toggle('show', bookOpen);
+  if (!bookOpen) return;
+  BOOK.innerHTML = BUILD_SKILLS.map((s) => {
+    const done = learned.has(s.id);
+    const doing = study.id === s.id;
+    const p = SKILL_BY_ID.get(s.prereq ?? '');
+    const lock = !done && !doing && p && !learned.has(p.id);
+    const cls = done ? 'done' : doing ? 'doing' : lock ? 'lock' : 'ready';
+    const pct = doing ? Math.round((study.t / s.time) * 100) : 0;
+    const gives = s.unlock.map((k) => BUILDS.find((b) => b.kind === k)?.icon ?? '?').join('');
+    return `<button class="sk ${cls}" data-sk="${s.id}" style="--p:${pct}">
+      <span class="ic">${s.icon}</span>
+      <span class="gv">${gives}</span>
+      ${doing ? `<span class="bar"><i style="width:${pct}%"></i></span>` : ''}
+      ${lock ? '<span class="lk">🔒</span>' : ''}
+      ${done ? '<span class="ck">✔</span>' : ''}
+    </button>`;
+  }).join('');
+}
+document.getElementById('bookmenu')?.addEventListener('click', () => {
+  bookOpen = !bookOpen;
+  if (bookOpen) exitBuildMode();
+  paintBook();
+});
+BOOK?.addEventListener('click', (e) => {
+  const btn = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
+  if (!btn) return;
+  const s = SKILL_BY_ID.get(btn.dataset.sk ?? '');
+  if (!s) return;
+  if (learned.has(s.id)) return;
+  const p = SKILL_BY_ID.get(s.prereq ?? '');
+  if (p && !learned.has(p.id)) { status.textContent = `${p.icon} ${p.name} 먼저`; return; }
+  startStudy(s);
+  paintBook();
+  status.textContent = `${s.icon} ${s.name} 공부 중…`;
+});
 let buildIdx = -1;                       // -1 = 건설 모드 아님
 const ghost = new THREE.Mesh(
   new THREE.BoxGeometry(1, 0.1, 1),
@@ -931,7 +1062,14 @@ function buildCheck(wx: number, wz: number, size: number, checkReach = false): {
   return { ok: true, y: g, why: '' };
 }
 
-/** 건설 메뉴 DOM (아이콘만 — 무텍스트 규칙) */
+/** 18-19: 스킬 해금 + 수량 제한까지 포함한 최종 판정 */
+function buildGate(b: BuildDef): string {
+  if (!isUnlocked(b.kind)) return '스킬북에서 배우기';
+  if (atMax(b)) return `${b.name} 만땅 (${b.max}개)`;
+  return '';
+}
+
+/** 건설 메뉴 DOM (아이콘 + 숫자만 — 무텍스트 규칙) */
 const BMENU = document.getElementById('bmenu') as HTMLDivElement;
 function paintBuildMenu() {
   if (!BMENU) return;
@@ -939,14 +1077,22 @@ function paintBuildMenu() {
     const on = i === buildIdx;
     const afford = canAfford(b.cost);
     const cost = Object.entries(b.cost).map(([k, v]) => ITEM[k as ItemKey].icon + v).join('');
-    return `<button class="bi${on ? ' on' : ''}${afford ? '' : ' poor'}" data-i="${i}">
-      <span class="ic">${b.icon}</span><span class="cst">${cost}</span></button>`;
+    const learnedB = isUnlocked(b.kind);
+    const n = countBuilt(b.kind);
+    const cls = [!learnedB ? 'lock' : '', !afford && learnedB ? 'poor' : '', on ? ' on' : ''].join('');
+    return `<button class="bi${cls}" data-i="${i}">
+      <span class="ic">${learnedB ? b.icon : '🔒'}</span>
+      <span class="cst">${cost}</span>
+      <span class="qty">${n}/${b.max}</span></button>`;
   }).join('');
 }
 BMENU?.addEventListener('click', (e) => {
   const btn = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
   if (!btn) return;
   const i = Number(btn.dataset.i);
+  const b = BUILDS[i];
+  if (!isUnlocked(b.kind)) { status.textContent = '📘 스킬북에서 배우기'; return; }
+  if (atMax(b)) { status.textContent = `${b.icon} ${b.name} 더 세울 수 없다 (${b.max}개)`; return; }
   buildIdx = buildIdx === i ? -1 : i;        // 다시 누르면 취소
   paintBuildMenu();
   ghost.visible = false;
@@ -956,6 +1102,7 @@ BMENU?.addEventListener('click', (e) => {
 });
 function exitBuildMode() { buildIdx = -1; ghost.visible = false; paintBuildMenu(); }
 paintBuildMenu();
+paintBook();
 
 /** Pointer = 지도 위 위치 계산 (건설 모드 미리보기) */
 function pointerToWorld(ev: PointerEvent): [number, number] | null {
@@ -975,13 +1122,14 @@ renderer.domElement.addEventListener('pointermove', (ev) => {
   if (!p) { ghost.visible = false; return; }
   const b = BUILDS[buildIdx];
   const tx = Math.floor(p[0]) + 0.5, tz = Math.floor(p[1]) + 0.5;
-  const chk = buildCheck(tx, tz, b.size, true);
+  const gate = buildGate(b);
+  const chk = gate ? { ok: false, y: 0, why: gate } : buildCheck(tx, tz, b.size, true);
   const y = groundAt(tx, tz);
   ghost.visible = y !== null;
   ghost.position.set(tx, (y ?? 0) + 0.06, tz);
   ghost.scale.set(b.size, 1, b.size);
   (ghost.material as THREE.MeshBasicMaterial).color.setHex(chk.ok ? 0x7CFC9A : 0xFF5A5A);
-  status.textContent = `건설: ${b.name} · ${chk.ok ? '가능' : chk.why}`;
+  status.textContent = `건설: ${b.name} · ${chk.ok ? `가능 (${countBuilt(b.kind)}/${b.max})` : chk.why}`;
 });
 // 건설 확정도 click 핸들러(명령 큐)가 담당 — 여기서는 미리보기만
 
@@ -1121,6 +1269,10 @@ export function tick(dt = 1 / 60) {
   npcTick(dt);
   updateHarvest(dt);
   tickOrderMarkers(dt, clock);
+  if (study.id) {
+    tickStudy(dt);
+    if (bookOpen) paintBook();
+  }
   if (camTween) {
     camTween.t = Math.min(1, camTween.t + dt * 2.2);
     const e = 1 - Math.pow(1 - camTween.t, 3);
@@ -1144,6 +1296,7 @@ renderer.setAnimationLoop((t) => {
 (window as unknown as { __three?: unknown }).__three = {
   scene, camera, renderer, controls, groundMeshes, groundAt, isGrounded: () => grounded, tick,
   THREE, get RULES() { return RULES; }, get hero() { return hero; }, propNodes, built, tasks,
-  orderHarvest, buildCheck, BUILDS, respawnQ, findPath, canReach, npc,
+  orderHarvest, buildCheck, BUILDS, respawnQ, findPath, canReach, npc, BUILD_SKILLS,
+  learned, study, isUnlocked, countBuilt, buildGate, inv,
   get buildIdx() { return buildIdx; },
 };

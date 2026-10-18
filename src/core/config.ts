@@ -419,6 +419,42 @@ export interface NodeKindDef {
 /** 18-16: 자원 밀도 배율. 1 = 원래, 낮출수록 섬이 드문드문 (= 긴장감 유지) */
 export const NODE_DENSITY = 0.42;
 
+// ============================================================
+//  18-19. 스킬북 — 모든 건물은 "배워야" 지을 수 있다 (GDD 13-1 해금)
+//  5장 12~13장: 스킬북에서 배운 것을 재료로 직접 만들고 원하는 자리에 배치
+// ============================================================
+export interface BuildSkillDef {
+  id: string;
+  name: string;
+  icon: string;
+  time: number;              // 공부 시간(초) — "공부는 기다림이다" (9장)
+  prereq: string | null;     // 선행 스킬
+  unlock: string[];          // 해금되는 건물 kind
+}
+
+/** 건축 스킬 (GDD 13-1 해금 표) — 크루 스킬(SKILLS)과는 별개 */
+export const BUILD_SKILLS: BuildSkillDef[] = [
+  { id: 'fire',    name: '불 피우기',  icon: '🔥', time: 8,  prereq: null,    unlock: ['b_campfire'] },
+  { id: 'shelter', name: '쉘터 건축', icon: '🛖', time: 18, prereq: 'fire',    unlock: ['b_hut'] },
+  { id: 'stone',   name: '석기',      icon: '🪨', time: 26, prereq: 'shelter', unlock: ['b_wall'] },
+  { id: 'iron',    name: '철기',      icon: '⛓️', time: 40, prereq: 'stone',   unlock: ['b_tower'] },
+];
+
+/** 18-19: 섬 전체 건설 수량 상한 — 주요 시설은 1개, 소형 시설은 여러 개 (GDD 13-1) */
+export const BUILD_MAX: Record<string, number> = {
+  b_campfire: 5,      // 모닥불 — 여러 개 (18-1 기본값)
+  b_hut: 1,           // 오두막 — 주요 시설 1개
+  b_storage: 1,       // 창고 — 주요 시설 1개
+  b_wall: 40,         // 울타리 — 여러 개
+  b_tower: 2,         // 감시탑 — 섬 전체를 볼 수 있는 곳은 한정
+};
+
+/** 시작부터 아는 스킬 (빈손으로 처음 하는 것) */
+export const START_SKILLS: string[] = ['fire'];
+
+/** 스킬 없이도 되는 기본 시설 (GDD 13-1 "해금: 기본") */
+export const FREE_BUILDS: string[] = ['b_storage'];
+
 export const NODE_KINDS: Record<string, NodeKindDef> = {
   tree:    { name: '나무',        family: 'wood',    drops: [{ item: 'wood', min: 3, max: 5 }], tex: 'n_tree',  radius: 22 },
   palm:    { name: '야자수',      family: 'wood',    drops: [{ item: 'wood', min: 2, max: 4 }, { item: 'food', min: 1, max: 2 }], tex: 'n_palm', radius: 20, onSand: true },
