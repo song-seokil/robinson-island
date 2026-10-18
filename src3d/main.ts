@@ -11,7 +11,7 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { AnimationMixer } from 'three';
 import dracoWasm from 'three/examples/jsm/libs/draco/draco_decoder.wasm?url';
 import dracoJs from 'three/examples/jsm/libs/draco/draco_wasm_wrapper.js?url';
-import { BUILD_SKILLS, BUILD_MAX, START_SKILLS, FREE_BUILDS, BuildSkillDef } from '../src/core/config';
+import { SKILL_TREE, SKILL_CHAPTERS, BUILD_MAX, START_SKILLS, FREE_BUILDS, SkillDef2 } from '../src/core/config';
 
 // ---------- 월드 규약 ----------
 export const TILE = 32;
@@ -373,7 +373,7 @@ function restoreBuildings() {
     n++;
   }
   savedBuilds = [];
-  if (n) { paintBuildMenu(); console.log('[builds] restored', n); }
+  if (n) { paintBuildPanel(); console.log('[builds] restored', n); }
 }
 
 // ---------- 인벤토리 + 채집 (게임의 심장) ----------
@@ -826,7 +826,7 @@ function finishTask(t: Task) {
         inst.visible = true;
         scene.add(inst);
         built.push({ kind: t.def.kind, x: t.x, z: t.z, obj: inst });
-        paintBuildMenu();
+        paintBuildPanel();
         status.textContent = `${t.def.name} 완성! (${countBuilt(t.def.kind)}/${t.def.max})`;
       }
     } else {
@@ -850,7 +850,7 @@ function demolishAt(wx: number, wz: number) {
       if (def) for (const k of Object.keys(def.cost) as ItemKey[]) inv[k] += Math.floor((def.cost[k] ?? 0) * 0.5);
       scene.remove(b.obj);
       built.splice(i, 1);
-      saveGame(); paintHUD(); paintBuildMenu();
+      saveGame(); paintHUD(); paintBuildPanel();
       status.textContent = '철거 (재료 50%)';
       return true;
     }
@@ -931,15 +931,15 @@ const BUILDS: BuildDef[] = [
 ];
 
 // ============================================================
-//  18-19. 스킬북 — 건물은 "배워야" 지을 수 있다 (GDD 5장 12~13장 · 13-1)
+//  18-19/18-21. 스킬북 + 건설 목록
 // ============================================================
 let bookOpen = false;
 
-const SKILL_BY_ID = new Map<string, BuildSkillDef>(BUILD_SKILLS.map((s) => [s.id, s]));
+const SKILL_BY_ID = new Map<string, SkillDef2>(SKILL_TREE.map((s) => [s.id, s]));
 /** 이 건물을 스킬북에서 배웠는가 (FREE_BUILDS 는 처음부터) */
 function isUnlocked(kind: string): boolean {
   if (FREE_BUILDS.includes(kind)) return true;
-  return BUILD_SKILLS.some((s) => s.unlock.includes(kind) && learned.has(s.id));
+  return SKILL_TREE.some((s) => s.unlock.includes(kind) && learned.has(s.id));
 }
 /** 이 건물을 이미 다 세웠는가 (18-19 수량 제한) */
 function countBuilt(kind: string): number {
@@ -948,9 +948,13 @@ function countBuilt(kind: string): number {
   return n;
 }
 function atMax(b: BuildDef): boolean { return countBuilt(b.kind) >= b.max; }
+/** 지금 실제로 "지을 수 있는" 것만 (배웠고 · 만땅이 아니고) */
+function buildableList(): BuildDef[] {
+  return BUILDS.filter((b) => isUnlocked(b.kind) && !atMax(b));
+}
 
 /** 공부 시작 — 선행 스킬이 배워져 있어야 한다 (9장 스킬트리) */
-function startStudy(s: BuildSkillDef): boolean {
+function startStudy(s: SkillDef2): boolean {
   if (learned.has(s.id) || study.id === s.id) return false;
   if (s.prereq && !learned.has(s.prereq)) return false;
   study.id = s.id; study.t = 0;
@@ -964,52 +968,115 @@ function tickStudy(dt: number) {
   if (study.t >= s.time) {
     learned.add(s.id);
     study.id = null; study.t = 0;
-    status.textContent = `${s.icon} ${s.name} 배웠다!`;
-    saveGame(); paintBuildMenu(); paintBook();
+    const got = s.unlock.map((k) => BUILDS.find((b) => b.kind === k)?.icon ?? '').filter(Boolean).join('');
+    status.textContent = `${s.icon} ${s.name} 배웠다!${got ? ` → ${got} 가능` : ''}`;
+    saveGame(); paintBuildPanel(); paintBook();
   }
 }
 
-/** 스킬북 패널 (무텍스트 — 아이콘 + 숫자 + 자물쇠) */
+// ---- 스킬북 (📘) — 인장(章)별로 정리한 책 ----
 const BOOK = document.getElementById('book') as HTMLDivElement;
 function paintBook() {
   if (!BOOK) return;
-  const BKM = document.getElementById('bookmenu');
-  if (BKM) BKM.classList.toggle('on', bookOpen);
+  document.getElementById('bookmenu')?.classList.toggle('on', bookOpen);
   BOOK.classList.toggle('show', bookOpen);
   if (!bookOpen) return;
-  BOOK.innerHTML = BUILD_SKILLS.map((s) => {
+  const ch = new Map<number, string>();
+  SKILL_CHAPTERS.forEach((name, i) => ch.set(i, name));
+  let html = `<div class="bhead"><span class="bk">📘</span>
+    <span class="bc">${learned.size}/${SKILL_TREE.length}</span>
+    ${study.id ? `<span class="bs">${SKILL_BY_ID.get(study.id)?.icon ?? ''} ${Math.round((study.t / (SKILL_BY_ID.get(study.id)?.time ?? 1)) * 100)}%</span>` : ''}
+    <button class="bx">✕</button></div>`;
+  let last = -1;
+  for (const s of SKILL_TREE) {
+    if (s.chapter !== last) {
+      last = s.chapter;
+      html += `<div class="bch"><b>${'一二三四五六'[s.chapter] ?? s.chapter + 1}</b> ${ch.get(s.chapter) ?? ''}</div>`;
+    }
     const done = learned.has(s.id);
     const doing = study.id === s.id;
     const p = SKILL_BY_ID.get(s.prereq ?? '');
-    const lock = !done && !doing && p && !learned.has(p.id);
+    const lock = !done && !doing && !!p && !learned.has(p.id);
     const cls = done ? 'done' : doing ? 'doing' : lock ? 'lock' : 'ready';
     const pct = doing ? Math.round((study.t / s.time) * 100) : 0;
     const gives = s.unlock.map((k) => BUILDS.find((b) => b.kind === k)?.icon ?? '?').join('');
-    return `<button class="sk ${cls}" data-sk="${s.id}" style="--p:${pct}">
+    html += `<button class="sk ${cls}" data-sk="${s.id}">
       <span class="ic">${s.icon}</span>
-      <span class="gv">${gives}</span>
+      <span class="nm">${s.name}</span>
+      <span class="ef">${s.effect}</span>
+      <span class="mt">${gives || (s.time + '″')}${gives ? ` · ${s.time}″` : ''}</span>
       ${doing ? `<span class="bar"><i style="width:${pct}%"></i></span>` : ''}
-      ${lock ? '<span class="lk">🔒</span>' : ''}
+      ${lock ? `<span class="lk">🔒 ${p?.icon ?? ''}</span>` : ''}
       ${done ? '<span class="ck">✔</span>' : ''}
     </button>`;
-  }).join('');
+  }
+  BOOK.innerHTML = html;
 }
 document.getElementById('bookmenu')?.addEventListener('click', () => {
   bookOpen = !bookOpen;
-  if (bookOpen) exitBuildMode();
+  if (bookOpen) closeBuildPanel();
   paintBook();
 });
 BOOK?.addEventListener('click', (e) => {
-  const btn = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
+  if ((e.target as HTMLElement).classList.contains('bx')) { bookOpen = false; paintBook(); return; }
+  const btn = (e.target as HTMLElement).closest('button.sk') as HTMLButtonElement | null;
   if (!btn) return;
   const s = SKILL_BY_ID.get(btn.dataset.sk ?? '');
-  if (!s) return;
-  if (learned.has(s.id)) return;
+  if (!s || learned.has(s.id)) return;
   const p = SKILL_BY_ID.get(s.prereq ?? '');
   if (p && !learned.has(p.id)) { status.textContent = `${p.icon} ${p.name} 먼저`; return; }
   startStudy(s);
   paintBook();
-  status.textContent = `${s.icon} ${s.name} 공부 중…`;
+  status.textContent = `${s.icon} ${s.name} 공부 중… (${s.time}초)`;
+});
+
+// ---- 건설 목록 (🏗) — 누르면 "지을 수 있는 것" 목록이 나온다 ----
+const BPANEL = document.getElementById('bpanel') as HTMLDivElement;
+function closeBuildPanel() {
+  BPANEL?.classList.remove('show');
+  document.getElementById('buildmenu')?.classList.remove('on');
+  buildIdx = -1;
+  ghost.visible = false;
+}
+function paintBuildPanel() {
+  if (!BPANEL) return;
+  const open = BPANEL.classList.contains('show');
+  if (!open) return;
+  const list = buildableList();
+  let html = `<div class="bhead"><span class="bk">🏗</span><span class="bc">${list.length}</span><button class="bx">✕</button></div>`;
+  if (!list.length) {
+    html += `<div class="bempty"><span>📘</span><span>아직 배운 것이 없다</span></div>`;
+  }
+  for (const b of list) {
+    const afford = canAfford(b.cost);
+    const cost = Object.entries(b.cost).map(([k, v]) => ITEM[k as ItemKey].icon + v).join(' ');
+    html += `<button class="bi${b.kind === BUILDS[buildIdx]?.kind ? ' on' : ''}${afford ? '' : ' poor'}"
+      data-k="${b.kind}">
+      <span class="ic">${b.icon}</span>
+      <span class="nm">${b.name}</span>
+      <span class="cst">${cost}</span>
+      <span class="qty">${countBuilt(b.kind)}/${b.max}</span>
+    </button>`;
+  }
+  BPANEL.innerHTML = html;
+}
+document.getElementById('buildmenu')?.addEventListener('click', () => {
+  const open = BPANEL?.classList.contains('show');
+  if (open) { closeBuildPanel(); return; }
+  bookOpen = false; paintBook();
+  BPANEL?.classList.add('show');
+  document.getElementById('buildmenu')?.classList.add('on');
+  paintBuildPanel();
+});
+BPANEL?.addEventListener('click', (e) => {
+  if ((e.target as HTMLElement).classList.contains('bx')) { closeBuildPanel(); return; }
+  const btn = (e.target as HTMLElement).closest('button.bi') as HTMLButtonElement | null;
+  if (!btn) return;
+  const def = BUILDS.find((b) => b.kind === btn.dataset.k);
+  if (!def) return;
+  closeBuildPanel();
+  buildIdx = BUILDS.indexOf(def);       // 패널을 닫은 뒤에 지정 (닫을 때 초기화됨)
+  status.textContent = `${def.name} — 맵을 눌러 지시`;
 });
 let buildIdx = -1;                       // -1 = 건설 모드 아님
 const ghost = new THREE.Mesh(
@@ -1069,39 +1136,8 @@ function buildGate(b: BuildDef): string {
   return '';
 }
 
-/** 건설 메뉴 DOM (아이콘 + 숫자만 — 무텍스트 규칙) */
-const BMENU = document.getElementById('bmenu') as HTMLDivElement;
-function paintBuildMenu() {
-  if (!BMENU) return;
-  BMENU.innerHTML = BUILDS.map((b, i) => {
-    const on = i === buildIdx;
-    const afford = canAfford(b.cost);
-    const cost = Object.entries(b.cost).map(([k, v]) => ITEM[k as ItemKey].icon + v).join('');
-    const learnedB = isUnlocked(b.kind);
-    const n = countBuilt(b.kind);
-    const cls = [!learnedB ? 'lock' : '', !afford && learnedB ? 'poor' : '', on ? ' on' : ''].join('');
-    return `<button class="bi${cls}" data-i="${i}">
-      <span class="ic">${learnedB ? b.icon : '🔒'}</span>
-      <span class="cst">${cost}</span>
-      <span class="qty">${n}/${b.max}</span></button>`;
-  }).join('');
-}
-BMENU?.addEventListener('click', (e) => {
-  const btn = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
-  if (!btn) return;
-  const i = Number(btn.dataset.i);
-  const b = BUILDS[i];
-  if (!isUnlocked(b.kind)) { status.textContent = '📘 스킬북에서 배우기'; return; }
-  if (atMax(b)) { status.textContent = `${b.icon} ${b.name} 더 세울 수 없다 (${b.max}개)`; return; }
-  buildIdx = buildIdx === i ? -1 : i;        // 다시 누르면 취소
-  paintBuildMenu();
-  ghost.visible = false;
-  status.textContent = buildIdx < 0
-    ? '건설 모드 해제'
-    : `${BUILDS[i].name} 선택 — 맵을 눌러 건설 지시`;
-});
-function exitBuildMode() { buildIdx = -1; ghost.visible = false; paintBuildMenu(); }
-paintBuildMenu();
+function exitBuildMode() { closeBuildPanel(); }
+paintBuildPanel();
 paintBook();
 
 /** Pointer = 지도 위 위치 계산 (건설 모드 미리보기) */
@@ -1296,7 +1332,7 @@ renderer.setAnimationLoop((t) => {
 (window as unknown as { __three?: unknown }).__three = {
   scene, camera, renderer, controls, groundMeshes, groundAt, isGrounded: () => grounded, tick,
   THREE, get RULES() { return RULES; }, get hero() { return hero; }, propNodes, built, tasks,
-  orderHarvest, buildCheck, BUILDS, respawnQ, findPath, canReach, npc, BUILD_SKILLS,
+  orderHarvest, buildCheck, BUILDS, respawnQ, findPath, canReach, npc, SKILL_TREE,
   learned, study, isUnlocked, countBuilt, buildGate, inv,
   get buildIdx() { return buildIdx; },
 };

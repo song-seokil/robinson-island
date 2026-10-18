@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 게임 전역 설정 — 밸런스 수치는 전부 이 파일에서 관리한다.
  *
  * 핵심 설계
@@ -420,24 +420,53 @@ export interface NodeKindDef {
 export const NODE_DENSITY = 0.42;
 
 // ============================================================
-//  18-19. 스킬북 — 모든 건물은 "배워야" 지을 수 있다 (GDD 13-1 해금)
-//  5장 12~13장: 스킬북에서 배운 것을 재료로 직접 만들고 원하는 자리에 배치
+//  18-21. 스킬북 — 배울 것이 있어야 한다 (GDD 9장 스킬트리 · 13-1 해금)
+//  "쉘터는 말만 쉘터" — 배운 것을 재료로 직접 만들고 원하는 자리에 배치
 // ============================================================
-export interface BuildSkillDef {
+export interface SkillDef2 {
   id: string;
   name: string;
   icon: string;
   time: number;              // 공부 시간(초) — "공부는 기다림이다" (9장)
   prereq: string | null;     // 선행 스킬
+  effect: string;            // 무엇이 달라지는가
   unlock: string[];          // 해금되는 건물 kind
+  chapter: number;           // 인장(章) — 읽는 순서
 }
 
-/** 건축 스킬 (GDD 13-1 해금 표) — 크루 스킬(SKILLS)과는 별개 */
-export const BUILD_SKILLS: BuildSkillDef[] = [
-  { id: 'fire',    name: '불 피우기',  icon: '🔥', time: 8,  prereq: null,    unlock: ['b_campfire'] },
-  { id: 'shelter', name: '쉘터 건축', icon: '🛖', time: 18, prereq: 'fire',    unlock: ['b_hut'] },
-  { id: 'stone',   name: '석기',      icon: '🪨', time: 26, prereq: 'shelter', unlock: ['b_wall'] },
-  { id: 'iron',    name: '철기',      icon: '⛓️', time: 40, prereq: 'stone',   unlock: ['b_tower'] },
+/** 인장(章) 제목 */
+export const SKILL_CHAPTERS = ['손', '몸', '불', '돌', '사냥', '철기'];
+
+/** 건축 + 생존 스킬 트리 (GDD 9장 · 13-1) */
+export const SKILL_TREE: SkillDef2[] = [
+  // ── 1장 손 ──
+  { id: 'fire',    name: '불 피우기',  icon: '🔥', time: 8,  prereq: null,    effect: '불을 다룬다',        unlock: ['b_campfire'], chapter: 0 },
+  { id: 'gather',  name: '채집의 손길', icon: '⛏️', time: 10, prereq: null,   effect: '채집 속도 +30%',      unlock: [], chapter: 0 },
+  { id: 'craft',   name: '손재주',     icon: '🧰', time: 14, prereq: null,    effect: '제작 시간 −15%',      unlock: [], chapter: 0 },
+  { id: 'study',   name: '집중력',     icon: '📖', time: 16, prereq: 'fire',   effect: '공부 시간 −25%',      unlock: [], chapter: 0 },
+  { id: 'shelter', name: '쉘터 건축', icon: '🛖', time: 18, prereq: 'fire',    effect: '집을 짓는다 · 건물 HP +40%', unlock: ['b_hut'], chapter: 0 },
+  { id: 'gather2', name: '도구 다루기', icon: '🔧', time: 22, prereq: 'gather', effect: '채집 속도 +30% 추가', unlock: [], chapter: 0 },
+
+  // ── 2장 몸 ──
+  { id: 'hp',      name: '강인한 몸',  icon: '❤️', time: 20, prereq: null,    effect: '최대 체력 +25',       unlock: [], chapter: 1 },
+  { id: 'move',    name: '민첩한 발',  icon: '👟', time: 18, prereq: null,    effect: '이동 속도 +12%',      unlock: [], chapter: 1 },
+  { id: 'energy',  name: '절약하는 위', icon: '🍽️', time: 24, prereq: 'move', effect: '에너지 소모 −25%',    unlock: [], chapter: 1 },
+  { id: 'night',   name: '밤눈',      icon: '🌙', time: 20, prereq: null,    effect: '밤이 보인다',         unlock: [], chapter: 1 },
+  { id: 'craft2',  name: '대장장이의 손', icon: '🔨', time: 34, prereq: 'craft', effect: '제작 시간 −15% 추가', unlock: [], chapter: 1 },
+
+  // ── 3장 불 ──
+  { id: 'warm',    name: '불꽃 친화',  icon: '🕯️', time: 24, prereq: 'fire',   effect: '불 근처 체온 회복 +60%', unlock: [], chapter: 2 },
+
+  // ── 4장 돌 ──
+  { id: 'stone',   name: '석기',      icon: '🪨', time: 26, prereq: 'shelter', effect: '바깥을 막는다',       unlock: ['b_wall'], chapter: 3 },
+  { id: 'pick',    name: '괭이질',    icon: '⛏️', time: 30, prereq: 'stone',   effect: '바위·광채가 잘 깨진다', unlock: [], chapter: 3 },
+
+  // ── 5장 사냥 ──
+  { id: 'hunt',    name: '사냥꾼',    icon: '🏹', time: 30, prereq: 'night',   effect: '공격력 +20%',         unlock: [], chapter: 4 },
+  { id: 'fish',    name: '어부의 눈', icon: '🎣', time: 28, prereq: 'night',   effect: '낚시 성공량 +1',       unlock: [], chapter: 4 },
+
+  // ── 6장 철기 ──
+  { id: 'iron',    name: '철기',      icon: '⛓️', time: 40, prereq: 'stone',   effect: '섬을 내려다본다',     unlock: ['b_tower'], chapter: 5 },
 ];
 
 /** 18-19: 섬 전체 건설 수량 상한 — 주요 시설은 1개, 소형 시설은 여러 개 (GDD 13-1) */
