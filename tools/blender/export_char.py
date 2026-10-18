@@ -116,89 +116,143 @@ def box(name, c, size, m=None, bevel=0.02, rot=0.0):
     if m: link(ob, m)
     return finish(ob)
 
-# ---------------------------------------------------------------- body (chibi)
+# ---------------------------------------------------------------- smooth body (metaball → remesh → subdiv)
+#  박스를 겹쳐 붙이면 각·모서리 때문에 카툰처럼 보이지 않는다.
+#  메타볼로 '녹인 몸' → 보OKE 리메시 → 서브디비전 = 매끈한 카툰 몸
+def metaball(name, blobs):
+    """blobs: [(x,y,z,radius,stiffness), ...] → 부드럽게 융합된 메시"""
+    bpy.ops.object.metaball_add(type='BALL', location=(0, 0, 0))
+    ob = bpy.context.object
+    ob.name = name
+    mb = ob.data
+    mb.resolution = 0.035
+    e0 = mb.elements[0]
+    e0.co = blobs[0][0]
+    e0.radius = blobs[0][1]
+    e0.stiffness = blobs[0][2]
+    for c, r, st in blobs[1:]:
+        e = mb.elements.new(type='BALL')
+        e.co = c
+        e.radius = r
+        e.stiffness = st
+    bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.convert(target='MESH')
+    ob = bpy.context.object
+    md = ob.modifiers.new('remesh', 'REMESH')
+    md.mode = 'VOXEL'
+    md.voxel_size = 0.032
+    md.use_smooth_shade = True
+    md.use_remove_disconnected = False
+    sm = ob.modifiers.new('smooth', 'SMOOTH')
+    sm.factor = 0.6
+    sm.iterations = 4
+    # 모디파를 지금 확정 — 그래야 나중에 재질이 유지된다
+    bpy.ops.object.select_all(action='DESELECT')
+    ob.select_set(True)
+    bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.modifier_apply(modifier='remesh')
+    bpy.ops.object.modifier_apply(modifier='smooth')
+    for p in ob.data.polygons:
+        p.use_smooth = True
+    ob.data.materials.append(SKIN)
+    PARTS.append(ob)
+    return ob
+
+ST = 2.0
+# --- 살몸 (피부)
+skin_blobs = [
+    ((0, 0, HIPZ - 0.02), 0.245, ST),                       # 골반
+    ((0, 0, 0.80), 0.250, ST),                              # 허리
+    ((0, 0, CHEST_Z - 0.04), 0.255, ST),                    # 가슴
+    ((0, 0, 1.00), 0.115, ST),                              # 목
+    ((0, 0, HEAD_Z), 0.215, ST * 1.25),                     # 머리(크게)
+    ((0, -0.12, HEAD_Z - 0.02), 0.085, ST * 1.4),           # 얼굴 전면 (평평하게)
+]
+for s in (-1, 1):
+    skin_blobs += [
+        ((s * SHOULDER_X, 0, SHOULDER_Z), 0.115, ST),
+        ((s * SHOULDER_X * 1.10, 0.01, ELBOW_Z), 0.092, ST),
+        ((s * SHOULDER_X * 1.16, 0.02, WRIST_Z), 0.082, ST),
+        ((s * SHOULDER_X * 1.18, 0.03, WRIST_Z - 0.045), 0.092, ST * 1.2),   # 손
+        ((s * 0.115, 0, 0.48), 0.145, ST),
+        ((s * 0.115, 0, 0.27), 0.125, ST),
+        ((s * 0.115, 0.035, 0.075), 0.120, ST),
+        ((s * 0.115, 0.055, 0.045), 0.100, ST),             # 발
+    ]
+metaball('body_skin', skin_blobs)
+
+# --- 옷 (살몸보다 조금 큰 Separate blob — 셔츠/코트)
+cloth_mat = SHIRT if STAGE == 1 else (COAT if STAGE == 2 else None)
+if cloth_mat is not None:
+    cloth_blobs = [
+        ((0, 0, HIPZ + 0.02), 0.262, ST),
+        ((0, 0, 0.80), 0.268, ST),
+        ((0, 0, CHEST_Z - 0.02), 0.272, ST),
+    ]
+    for s in (-1, 1):
+        cloth_blobs.append(((s * SHOULDER_X, 0, SHOULDER_Z + 0.01), 0.132, ST))
+        cloth_blobs.append(((s * SHOULDER_X * 1.08, 0.01, 0.86), 0.108, ST))
+    ob = metaball('body_cloth', cloth_blobs)
+    ob.data.materials.clear()
+    ob.data.materials.append(cloth_mat)
+
+# --- 바지 (골반~무릎)
+pant_blobs = [((0, 0, HIPZ + 0.01), 0.258, ST)] + [((s * 0.115, 0, 0.50), 0.152, ST) for s in (-1, 1)]
 LEG_MAT = PANTS_R if STAGE == 2 else PANTS
-body_mat = SHIRT if STAGE >= 1 else SKIN
+ob = metaball('body_pants', pant_blobs)
+ob.data.materials.clear()
+ob.data.materials.append(LEG_MAT)
 
-# 다리 — 짧고 굵게
+# --- 머리카락 / 수염 / 모자 등 표면 디테일 (프리미티브 유지)
+ball('hair', (0, 0.012, HEAD_Z + 0.052), HEAD_R * 1.03, (1.0, 1.0, 0.94), HAIR, 22)
+ball('hair_back', (0, 0.095, HEAD_Z - 0.045), HEAD_R * 0.78, (1.15, 0.62, 1.30), HAIR, 14)
 for s, tag in ((-1, 'L'), (1, 'R')):
-    sx = s * 0.115
-    cone('thigh' + tag, (sx, 0, HIPZ - 0.02), (sx, 0, KNEE), 0.150, 0.125, LEG_MAT, 10)
-    cone('shin' + tag, (sx, 0, KNEE), (sx, 0, ANKLE), 0.125, 0.100, LEG_MAT, 10)
-    if STAGE >= 1:
-        box('boot' + tag, (sx, 0.055, 0.075), (0.165, 0.27, 0.15), BOOT, 0.04)
-    else:
-        box('foot' + tag, (sx, 0.070, 0.065), (0.150, 0.245, 0.13), SKIN, 0.045)
-        cone('rag' + tag, (sx, 0, 0.40), (sx, 0, 0.16), 0.128, 0.115, PANTS, 8)
-    if STAGE == 2:
-        cone('wrap' + tag, (sx, 0, 0.38), (sx, 0, 0.15), 0.135, 0.115, FUR, 10)
+    ball('eye' + tag, (s * 0.070, -0.178, HEAD_Z + 0.012), 0.029, (1.0, 0.5, 1.15), EYE, 10)
+    ball('brow' + tag, (s * 0.074, -0.172, HEAD_Z + 0.080), 0.036, (1.5, 0.40, 0.30), HAIR, 8)
+ball('nose', (0, -0.196, HEAD_Z - 0.020), 0.034, (0.85, 1.15, 0.8), SKIN, 8)
 
-# 골반 + 몸통 — 크고 넓게
-box('pelvis', (0, 0, HIPZ), (0.44, 0.32, 0.30), LEG_MAT, 0.07)
-box('torso', (0, 0, 0.82), (0.50, 0.36, 0.44), body_mat, 0.09)
-box('chest', (0, 0.005, CHEST_Z), (0.54, 0.38, 0.20), body_mat, 0.08)
-if STAGE >= 1:
-    box('shirt_tail', (0, -0.01, 0.60), (0.52, 0.37, 0.22), SHIRT, 0.07)
-    box('shirt_open', (0, -0.185, 0.88), (0.22, 0.06, 0.30), SHIRT, 0.03)
-
-# 팔 — 짧고 굵게
-for s, tag in ((-1, 'L'), (1, 'R')):
-    sx = s * SHOULDER_X
-    ball('sh' + tag, (sx, 0, SHOULDER_Z), 0.115, (1, 1, 0.95), body_mat, 12)
-    cone('uarm' + tag, (sx, 0, SHOULDER_Z), (sx * 1.10, 0.01, ELBOW_Z), 0.098, 0.082, body_mat, 10)
-    cone('farm' + tag, (sx * 1.10, 0.01, ELBOW_Z), (sx * 1.16, 0.02, WRIST_Z), 0.082, 0.070, SKIN, 10)
-    ball('hand' + tag, (sx * 1.16, 0.02, WRIST_Z - 0.025), 0.082, (1, 1.05, 1), SKIN, 10)
-
-# 머리 — 크게 (3등신의 핵심)
-cone('neck', (0, 0, 0.99), (0, 0, 1.03), 0.105, 0.110, SKIN_D, 10)
-ball('head', (0, 0, HEAD_Z), HEAD_R, (1.0, 0.93, 1.02), SKIN, 24)
-ball('hair', (0, 0.015, HEAD_Z + 0.055), HEAD_R * 1.02, (1.0, 0.99, 0.95), HAIR, 24)
-ball('hair_back', (0, 0.085, HEAD_Z - 0.03), HEAD_R * 0.72, (1.20, 0.70, 1.25), HAIR, 14)
-# 얼굴 — 눈·눈썹·코 (카툰 표정)
-for s, tag in ((-1, 'L'), (1, 'R')):
-    ball('eye' + tag, (s * 0.072, -0.176, HEAD_Z + 0.015), 0.030, (1.0, 0.55, 1.15), EYE, 10)
-    ball('brow' + tag, (s * 0.076, -0.170, HEAD_Z + 0.082), 0.038, (1.5, 0.42, 0.30), HAIR, 8)
-ball('nose', (0, -0.190, HEAD_Z - 0.018), 0.036, (0.85, 1.15, 0.8), SKIN, 8)
-
-# 수염 — 생존자의 아크 (0 없음 → 1 회색 → 2 통짜)
 if STAGE == 1:
-    ball('stubble', (0, -0.095, HEAD_Z - 0.115), 0.125, (1.02, 0.90, 0.62), HAIR_S, 16)
+    ball('stubble', (0, -0.100, HEAD_Z - 0.115), 0.130, (1.02, 0.88, 0.60), HAIR_S, 16)
 elif STAGE == 2:
-    ball('beard', (0, -0.088, HEAD_Z - 0.118), 0.150, (1.05, 0.94, 0.86), HAIR, 18)
-    ball('beard_tip', (0, -0.115, HEAD_Z - 0.196), 0.100, (0.82, 0.82, 1.10), HAIR, 12)
-    ball('moustache', (0, -0.190, HEAD_Z - 0.020), 0.090, (1.55, 0.55, 0.30), HAIR, 12)
+    ball('beard', (0, -0.092, HEAD_Z - 0.120), 0.152, (1.05, 0.92, 0.84), HAIR, 18)
+    ball('beard_tip', (0, -0.120, HEAD_Z - 0.200), 0.100, (0.82, 0.80, 1.05), HAIR, 12)
+    ball('moustache', (0, -0.192, HEAD_Z - 0.022), 0.092, (1.55, 0.52, 0.30), HAIR, 12)
+
+# --- 부츠/-wrap (stage 1~2)
+if STAGE >= 1:
+    for s in (-1, 1):
+        box('boot' + str(s), (s * 0.115, 0.045, 0.072), (0.165, 0.26, 0.145), BOOT, 0.045)
+        if STAGE == 2:
+            cone('wrap' + str(s), (s * 0.115, 0, 0.38), (s * 0.115, 0, 0.16), 0.132, 0.112, FUR, 10)
 
 # ---------------------------------------------------------------- gear
 if STAGE >= 1:
-    box('belt', (0, 0, 0.655), (0.46, 0.34, 0.10), LEATHER, 0.02)
-    box('buckle', (0, -0.175, 0.655), (0.09, 0.03, 0.08), G_BELT, 0.012)
-    box('pouch', (0.225, -0.02, 0.615), (0.12, 0.13, 0.15), G_BELT, 0.03)
-    ball('flask', (0.250, 0.03, 0.545), 0.055, (1, 1, 1.30), G_BELT, 8)
-    ball('flask2', (-0.250, 0.03, 0.565), 0.048, (1, 1, 1.22), G_BELT, 8)
-    # 도끼 + 단검 (크루조는 창이 아니라 단검과 총을 썼다)
-    cone('axe_handle', (0.268, -0.11, 0.64), (0.290, -0.14, 0.40), 0.018, 0.018, G_BELT, 6)
-    box('axe_head', (0.290, -0.14, 0.38), (0.12, 0.04, 0.09), POT, 0.012)
-    box('dagger_grip', (-0.268, -0.12, 0.68), (0.05, 0.05, 0.11), G_BELT, 0.015)
-    cone('dagger_blade', (-0.268, -0.125, 0.625), (-0.271, -0.13, 0.45), 0.028, 0.002, POT, 6)
-    box('dagger_guard', (-0.268, -0.12, 0.625), (0.08, 0.05, 0.024), POT, 0.008)
+    box('belt', (0, 0, 0.655), (0.50, 0.36, 0.10), LEATHER, 0.02)
+    box('buckle', (0, -0.185, 0.655), (0.09, 0.03, 0.08), G_BELT, 0.012)
+    box('pouch', (0.245, -0.02, 0.615), (0.12, 0.13, 0.15), G_BELT, 0.03)
+    ball('flask', (0.270, 0.03, 0.545), 0.055, (1, 1, 1.30), G_BELT, 8)
+    ball('flask2', (-0.270, 0.03, 0.565), 0.048, (1, 1, 1.22), G_BELT, 8)
+    cone('axe_handle', (0.288, -0.11, 0.64), (0.310, -0.14, 0.40), 0.018, 0.018, G_BELT, 6)
+    box('axe_head', (0.310, -0.14, 0.38), (0.12, 0.04, 0.09), POT, 0.012)
+    box('dagger_grip', (-0.288, -0.12, 0.68), (0.05, 0.05, 0.11), G_BELT, 0.015)
+    cone('dagger_blade', (-0.288, -0.125, 0.625), (-0.291, -0.13, 0.45), 0.028, 0.002, POT, 6)
+    box('dagger_guard', (-0.288, -0.12, 0.625), (0.08, 0.05, 0.024), POT, 0.008)
 
 if STAGE == 2:
-    box('coat', (0, 0.005, 0.80), (0.56, 0.42, 0.46), COAT, 0.10)
-    box('coat_skirt', (0, 0.005, 0.55), (0.60, 0.44, 0.26), COAT, 0.09)
-    ball('collar', (0, 0.02, 1.005), 0.245, (1.05, 0.95, 0.40), G_BACK, 16)
-    box('coat_trim', (0, -0.215, 0.86), (0.22, 0.05, 0.44), G_BACK, 0.02)
-    box('tool_saw', (0.255, -0.13, 0.64), (0.05, 0.03, 0.22), G_BELT, 0.01)
-    ball('hat', (0, 0.01, 1.360), 0.200, (1.0, 1.0, 0.66), G_HEAD, 18)
-    box('hatbrim', (0, 0.01, 1.270), (0.48, 0.48, 0.05), G_HEAD, 0.02)
-    ball('hatband', (0, 0.01, 1.292), 0.205, (1.0, 1.0, 0.15), G_BACK, 14)
-    ball('basket', (0, 0.265, 0.88), 0.185, (1.0, 0.60, 1.10), G_BACK, 12)
-    ball('basket_in', (0, 0.365, 0.88), 0.135, (1.0, 0.5, 1.0), G_BACK, 10)
-    ball('rope', (0, 0.400, 0.94), 0.100, (1.15, 0.35, 0.55), G_BACK, 10)
-    box('strap_l', (-0.150, 0.14, 0.90), (0.07, 0.24, 0.10), G_BACK, 0.02)
-    box('strap_r', (0.150, 0.14, 0.90), (0.07, 0.24, 0.10), G_BACK, 0.02)
-    cone('gun_stock', (0.31, 0.27, 0.42), (0.15, 0.36, 0.86), 0.045, 0.036, G_BACK, 8)
-    cone('gun_barrel', (0.14, 0.365, 0.84), (-0.10, 0.40, 1.30), 0.024, 0.020, G_BACK, 8)
-    box('gun_lock', (0.15, 0.385, 0.84), (0.05, 0.03, 0.10), G_BACK, 0.01)
+    ball('collar', (0, 0.02, 1.000), 0.250, (1.02, 0.95, 0.40), G_BACK, 16)
+    box('coat_trim', (0, -0.225, 0.84), (0.22, 0.05, 0.42), G_BACK, 0.02)
+    box('tool_saw', (0.275, -0.13, 0.64), (0.05, 0.03, 0.22), G_BELT, 0.01)
+    ball('hat', (0, 0.01, 1.365), 0.205, (1.0, 1.0, 0.66), G_HEAD, 18)
+    box('hatbrim', (0, 0.01, 1.268), (0.50, 0.50, 0.05), G_HEAD, 0.02)
+    ball('hatband', (0, 0.01, 1.292), 0.210, (1.0, 1.0, 0.15), G_BACK, 14)
+    ball('basket', (0, 0.275, 0.88), 0.195, (1.0, 0.58, 1.08), G_BACK, 12)
+    ball('basket_in', (0, 0.375, 0.88), 0.140, (1.0, 0.5, 1.0), G_BACK, 10)
+    ball('rope', (0, 0.410, 0.94), 0.105, (1.15, 0.35, 0.55), G_BACK, 10)
+    box('strap_l', (-0.160, 0.14, 0.90), (0.07, 0.24, 0.10), G_BACK, 0.02)
+    box('strap_r', (0.160, 0.14, 0.90), (0.07, 0.24, 0.10), G_BACK, 0.02)
+    cone('gun_stock', (0.33, 0.28, 0.42), (0.16, 0.37, 0.86), 0.046, 0.037, G_BACK, 8)
+    cone('gun_barrel', (0.15, 0.375, 0.84), (-0.10, 0.41, 1.30), 0.025, 0.021, G_BACK, 8)
+    box('gun_lock', (0.16, 0.395, 0.84), (0.05, 0.03, 0.10), G_BACK, 0.01)
 
 # ---------------------------------------------------------------- join
 bpy.ops.object.select_all(action='DESELECT')
@@ -208,6 +262,11 @@ bpy.context.view_layer.objects.active = PARTS[0]
 bpy.ops.object.join()
 body = bpy.context.object
 body.name = 'Robinson'
+print('[char] parts=%d mats=%s' % (len(PARTS), [m.name for m in body.data.materials]))
+used = {}
+for _p in body.data.polygons:
+    used[_p.material_index] = used.get(_p.material_index, 0) + 1
+print('[char] material_index usage: %s' % sorted(used.items()))
 
 # ---------------------------------------------------------------- 텍스처 투영 (A안)
 #  2번 이미지를 정면(살짝 비스듬한) 방향에서 그대로 입힌다 — 손화풍 유지
@@ -474,7 +533,7 @@ print('[char] nla tracks: %s' % [t.name for t in tracks])
 
 bpy.ops.object.select_all(action='SELECT')
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
-kw = dict(filepath=OUT, export_format='GLB', export_apply=True, export_yup=True,
+kw = dict(filepath=OUT, export_format='GLB', export_apply=False, export_yup=True,
           export_animations=True, export_skins=True, export_materials='EXPORT')
 try:
     bpy.ops.export_scene.gltf(**kw, export_animation_mode='ACTIONS')
