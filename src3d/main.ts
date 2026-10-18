@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import { AnimationMixer } from 'three';
 import dracoWasm from 'three/examples/jsm/libs/draco/draco_decoder.wasm?url';
 import dracoJs from 'three/examples/jsm/libs/draco/draco_wasm_wrapper.js?url';
 
@@ -38,13 +39,18 @@ scene.background = new THREE.Color(0x0a1a2a);
 scene.fog = new THREE.Fog(0x0a1a2a, 90, 240);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 800);
-camera.position.set(WORLD / 2 - 34, 46, WORLD / 2 + 62);
+const CLOSE_UP = new URLSearchParams(location.search).has('stage');
+if (CLOSE_UP) {
+  camera.position.set(WORLD / 2 - 5.5, 4.2, WORLD / 2 + 7.5);   // 생존자 클로즈업
+} else {
+  camera.position.set(WORLD / 2 - 34, 46, WORLD / 2 + 62);
+}
 
 const controls = new OrbitControls(camera, canvas);
-controls.target.set(WORLD / 2, 0, WORLD / 2);
+controls.target.set(WORLD / 2, CLOSE_UP ? 1.0 : 0, WORLD / 2);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
-controls.minDistance = 14;
+controls.minDistance = 2.5;
 controls.maxDistance = 190;
 controls.maxPolarAngle = Math.PI * 0.49;      // 지면 아래로 못 내려감
 controls.minPolarAngle = Math.PI * 0.08;
@@ -101,6 +107,44 @@ gltf.load(`/glb/island_${seed}.glb`, (g) => {
   status.textContent = `섬 로드 실패: ${err}`;
 });
 
+// ---------- 생존자 (Blender 리그 + 4종 클립) ----------
+const mixer = new AnimationMixer(scene);
+let hero: THREE.Object3D | null = null;
+let clips: THREE.AnimationClip[] = [];
+let current = '';
+const KEYS: Record<string, string> = { '1': 'Idle', '2': 'Walk', '3': 'Attack', '4': 'Hit' };
+
+function play(name: string, loop = true) {
+  if (!hero) return;
+  const clip = clips.find((c) => c.name === name);
+  if (!clip) return;
+  mixer.stopAllAction();
+  const act = mixer.clipAction(clip);
+  act.reset().play();
+  if (!loop) act.setLoop(THREE.LoopOnce, 1);
+  act.clampWhenFinished = !loop;
+  current = name;
+  status.textContent = `로빈슨 · ${name}`;
+}
+
+// 생존자 3상태 — 0 난파 / 1 1일차 / 2 적응완료
+const params0 = new URLSearchParams(location.search);
+const startStage = Math.max(0, Math.min(2, Number(params0.get('stage') ?? 2)));
+gltf.load(`/glb/robinson_s${startStage}.glb`, (g) => {
+  hero = g.scene;
+  hero.traverse((o) => {
+    const m = (o as THREE.Mesh).material as THREE.Material | undefined;
+    if (m) (Array.isArray(m) ? m : [m]).forEach((mm) => { (mm as THREE.MeshStandardMaterial).flatShading = true; });
+    o.castShadow = true;
+    o.receiveShadow = true;
+  });
+  hero.position.set(WORLD / 2, 0, WORLD / 2);   // 섬 한가운데
+  scene.add(hero);
+  clips = g.animations;
+  (window as unknown as { __hero?: unknown }).__hero = { hero, clips, mixer, play };
+  play(clips.some((c) => c.name === 'Walk') ? 'Walk' : clips[0]?.name ?? 'Idle');
+}, undefined, (err) => { console.warn('[hero]', err); });
+
 // ---------- 루프 ----------
 function resize() {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -109,7 +153,15 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
-renderer.setAnimationLoop(() => {
+window.addEventListener('keydown', (e) => {
+  const n = KEYS[e.key];
+  if (n) play(n, n !== 'Attack' && n !== 'Hit');
+});
+
+let prev = performance.now();
+renderer.setAnimationLoop((t) => {
+  mixer.update(Math.min(0.05, (t - prev) / 1000));
+  prev = t;
   controls.update();
   renderer.render(scene, camera);
 });

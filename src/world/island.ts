@@ -45,6 +45,8 @@ export interface IslandData {
   trait: IslandTrait;
   terrain: IslandTerrain;
   hasRiver: boolean;      // 섬을 가르는 물길이 있는가 (여울로만 건넌다)
+  /** 산(메사) — 최대 2개. 평평한 정상면(cx,cy,R) = 성 자리 */
+  mesas: { cx: number; cy: number; R: number; top: number }[];
   /** 사용자가 폭파/평탄화해 넓힌 통로: 타일 인덱스 → 통행 폭 등급(PASS) */
   gates: Record<number, number>;
   counts: Record<string, number>;      // 종류별 노드 개수
@@ -616,6 +618,7 @@ let hasRiver = false;
     trait,
     terrain,
     hasRiver,
+    mesas,
     gates: {},
     counts,
   };
