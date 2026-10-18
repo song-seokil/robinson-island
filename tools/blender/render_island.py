@@ -215,6 +215,20 @@ except Exception:
 
 DEP = np.maximum(0.0, -H)
 
+# --- 해안 절벽(海食 cliffs): 물 바로 아래를 급하게 떨어뜨린다 ---
+#   위로만 보던 판떡이 아니라, 360° 어디서 봐도 '섬'으로 읽히게 만드는 핵심.
+CLIFF = float(os.environ.get('B3D_CLIFF', '1.0'))
+if CLIFF > 0:
+    neg = H < 0.0
+    H[neg] = -(((-H[neg]) ** 0.55) * (1.8 * CLIFF))
+    # 가장자리(맵 밖)는 더 깊게 내려가 옆면이 밑을 덮는다
+    edge = np.minimum(np.minimum(np.arange(GRID), GRID - 1 - np.arange(GRID))[:, None],
+                      np.minimum(np.arange(GRID), GRID - 1 - np.arange(GRID))[None, :])
+    skirt = np.clip((3.0 - edge) / 3.0, 0.0, 1.0)
+    H -= skirt * 2.2 * CLIFF
+    DEP = np.maximum(0.0, -H)
+    print('[b3d] coastal cliff ON (k=%.2f)  H min=%.2f' % (CLIFF, H.min()))
+
 # --- 색(만화풍 · 채도 높은 3톤) ---
 n1 = vnoise(GRID, 80, 3)
 n2 = vnoise(GRID, 200, 5)
