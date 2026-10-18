@@ -476,7 +476,10 @@ type Task = {
 };
 const tasks: Task[] = [];
 let taskSeq = 0;
-const npc = { task: null as Task | null, state: 'idle' as 'idle' | 'walk' | 'work', timer: 0 };
+const npc = {
+  task: null as Task | null, state: 'idle' as 'idle' | 'walk' | 'work', timer: 0,
+  path: [] as { x: number; z: number }[], pi: 0, stuck: 0,
+};
 
 /** 한 칸 이동 시도 (기존 이동 규칙 재사용) */
 function tryStep(dx: number, dz: number, dist: number): boolean {
@@ -550,14 +553,166 @@ function orderHarvest(n: (typeof propNodes)[number]) {
   status.textContent = '채집 지시!';
 }
 
-/** 크루조 AI: 대기 → 이동 → 작업 → 완료 */
+// ============================================================
+//  A* 경로 탐색 (18-18) — 크루조는 산 위에도 오른다
+//  "직선으로 걸어가다 막히면 미끄러진다" 는 방식으로는 협곡·메사 벽을 못 넘는다.
+//  18-12 통행규격(WALK 이상)이 보장하는 길만 따라간다.
+// ============================================================
+const DIRS: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+let walkMap: Uint8Array | null = null;
+
+/** walkable() 맵을 한 번만 만든다 (RULES 로드 후) */
+function ensureWalkMap() {
+  if (!RULES || walkMap) return;
+  const m = RULES.map;
+  walkMap = new Uint8Array(m * m);
+  for (let z = 0; z < m; z++) {
+    for (let x = 0; x < m; x++) walkMap[z * m + x] = walkable(x, z) ? 1 : 0;
+  }
+}
+function invalidateWalkMap() { walkMap = null; }
+
+/** 최소 힙 (f 값 기준) — A* 의 open 리스트 */
+class MinHeap {
+  private a: number[] = [];
+  private f: Float32Array;
+  constructor(f: Float32Array) { this.f = f; }
+  get size() { return this.a.length; }
+  push(i: number) {
+    const a = this.a, f = this.f;
+    a.push(i);
+    let c = a.length - 1;
+    while (c > 0) {
+      const p = (c - 1) >> 1;
+      if (f[a[p]] <= f[a[c]]) break;
+      const t = a[p]; a[p] = a[c]; a[c] = t; c = p;
+    }
+  }
+  pop(): number {
+    const a = this.a, f = this.f, top = a[0], last = a.pop()!;
+    if (a.length) {
+      a[0] = last;
+      let c = 0;
+      for (;;) {
+        const l = c * 2 + 1, r = l + 1;
+        let s = c;
+        if (l < a.length && f[a[l]] < f[a[s]]) s = l;
+        if (r < a.length && f[a[r]] < f[a[s]]) s = r;
+        if (s === c) break;
+        const t = a[s]; a[s] = a[c]; a[c] = t; c = s;
+      }
+    }
+    return top;
+  }
+}
+
+/** 주어진 타일에서 가장 가까운 통행 가능 타일 인덱스 (없으면 -1) */
+function nearestWalkable(cx: number, cz: number, maxR = 8): number {
+  if (!RULES || !walkMap) return -1;
+  const m = RULES.map;
+  const cl = (v: number) => Math.max(0, Math.min(m - 1, Math.floor(v)));
+  const x0 = cl(cx), z0 = cl(cz);
+  if (walkMap[z0 * m + x0]) return z0 * m + x0;
+  let best = -1, bd = Infinity;
+  for (let r = 1; r <= maxR; r++) {
+    for (let dz = -r; dz <= r; dz++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;   // 링만
+        const gx = x0 + dx, gz = z0 + dz;
+        if (gx < 0 || gz < 0 || gx >= m || gz >= m) continue;
+        const gi = gz * m + gx;
+        if (!walkMap[gi]) continue;
+        const d = dx * dx + dz * dz;
+        if (d < bd) { bd = d; best = gi; }
+      }
+    }
+    if (best >= 0) break;                 // 가장 가까운 링에서 결정
+  }
+  return best;
+}
+
+/**
+ * A* — 시작~목적지 최단 보행 경로(월드 좌표). 갈 수 없으면 null.
+ * 계단식 단차를 prefer 하도록 고도차 페널티를 준다 (가파르지 않은 길을 고른다).
+ */
+function findPath(sx: number, sz: number, tx: number, tz: number): { x: number; z: number }[] | null {
+  ensureWalkMap();
+  if (!RULES || !walkMap) return null;
+  const m = RULES.map;
+  // 시작/목적이 통행 불가 타일이면 가장 가까운 통행 가능 타일에 붙인다
+  const s0 = nearestWalkable(sx, sz, 10);
+  const goal = nearestWalkable(tx, tz, 8);
+  if (s0 < 0 || goal < 0) return null;
+  if (s0 === goal) return [];
+  const N = m * m;
+  const g = new Float32Array(N).fill(Infinity);
+  const came = new Int32Array(N).fill(-1);
+  const closed = new Uint8Array(N);
+  const f = new Float32Array(N).fill(Infinity);
+  const gx1 = goal % m, gz1 = (goal - gx1) / m;
+  const heur = (i: number) => {
+    const x = i % m, z = (i - x) / m;
+    const dx = Math.abs(x - gx1), dz = Math.abs(z - gz1);
+    return dx + dz + (1.4142 - 2) * Math.min(dx, dz);
+  };
+  g[s0] = 0; f[s0] = heur(s0);
+  const open = new MinHeap(f);
+  open.push(s0);
+  let guard = N * 4;
+  while (open.size && guard-- > 0) {
+    const cur = open.pop();
+    if (cur === goal) {
+      const path: { x: number; z: number }[] = [];
+      for (let c = goal; c !== s0 && c !== -1; c = came[c]) {
+        const x = c % m, z = (c - x) / m;
+        path.push({ x: x + 0.5, z: z + 0.5 });
+      }
+      path.reverse();
+      return path;
+    }
+    if (closed[cur]) continue;
+    closed[cur] = 1;
+    const cx = cur % m, cz = (cur - cx) / m;
+    const hCur = RULES.elev[cur];
+    for (const [dx, dz] of DIRS) {
+      const nx = cx + dx, nz = cz + dz;
+      if (nx < 0 || nz < 0 || nx >= m || nz >= m) continue;
+      const ni = nz * m + nx;
+      if (!walkMap[ni] || closed[ni]) continue;
+      if (dx && dz && (!walkMap[cz * m + nx] || !walkMap[nz * m + cx])) continue;  // 모서리 끼어들기 금지
+      // 계단식 단차를 조금 더 비싸게 — 가파른 경사 대신 완만한 길을 고른다
+      const rise = Math.abs(RULES.elev[ni] - hCur) * 2.2;
+      const ng = g[cur] + (dx && dz ? 1.4142 : 1) + rise;
+      if (ng < g[ni]) {
+        g[ni] = ng; came[ni] = cur; f[ni] = ng + heur(ni);
+        open.push(ni);
+      }
+    }
+  }
+  return null;
+}
+
+/** 이 타일까지 갈 수 있는가 (봉우리·절벽에 낀 곳 판정) */
+function canReach(wx: number, wz: number, fromX?: number, fromZ?: number): boolean {
+  ensureWalkMap();
+  if (!RULES || !walkMap) return true;
+  const h = hero;
+  const fx = fromX ?? (h ? h.position.x : 0), fz = fromZ ?? (h ? h.position.z : 0);
+  return findPath(fx, fz, wx, wz) !== null;
+}
+
+/** 크루조 AI: 대기 → 경로 따라 이동 → 작업 → 완료 */
 function npcTick(dt: number) {
   const h = (window as unknown as { __hero?: { hero: THREE.Object3D } }).__hero?.hero;
   if (!h) return;
   if (!npc.task) {
     const t = nearestIdleTask();
-    if (t) { npc.task = t; npc.state = 'walk'; npc.timer = 0; }
-    else { npc.state = 'idle'; if (current === 'Walk') play('Idle'); return; }
+    if (t) {
+      npc.task = t; npc.state = 'walk'; npc.timer = 0; npc.pi = 0; npc.stuck = 0;
+      const tx = t.node ? t.node.x : t.x, tz = t.node ? t.node.z : t.z;
+      npc.path = findPath(h.position.x, h.position.z, tx, tz) ?? [];
+      if (!npc.path.length) status.textContent = '길이 없음…';
+    } else { npc.state = 'idle'; if (current === 'Walk') play('Idle'); return; }
   }
   const t = npc.task!;
   const tx = t.node ? t.node.x : t.x, tz = t.node ? t.node.z : t.z;
@@ -569,18 +724,36 @@ function npcTick(dt: number) {
       npc.timer = t.type === 'build' ? 2.4 : 1.5;
       play('Attack', false);
       status.textContent = t.type === 'build' ? '짓는 중…' : '채집 중…';
+      return;
+    }
+    // 경로 웨이포인트 추격
+    const wp = npc.path[npc.pi];
+    let gx = wp ? wp.x : tx, gz = wp ? wp.z : tz;
+    if (wp && Math.hypot(wp.x - h.position.x, wp.z - h.position.z) < 0.42) {
+      npc.pi++; npc.stuck = 0;
+      if (npc.pi >= npc.path.length) { npc.path = []; npc.pi = 0; }
+    }
+    const wx2 = wp && npc.pi < npc.path.length ? npc.path[npc.pi] : null;
+    if (wx2) { gx = wx2.x; gz = wx2.z; }
+    const mx = gx - h.position.x, mz = gz - h.position.z;
+    const md = Math.hypot(mx, mz) || 1;
+    const sp = 3.4 * dt;
+    const p0x = h.position.x, p0z = h.position.z;
+    if (tryStep(mx / md, mz / md, sp)) {
+      npc.stuck = 0;
+      const ang = Math.atan2(mx, mz) * (180 / Math.PI);
+      h.rotation.y += (((ang + 180) - h.rotation.y + 540) % 360) - 180;
+      if (current !== 'Walk') play('Walk');
     } else {
-      const sp = 3.4 * dt;
-      if (tryStep(dx / d, dz / d, sp)) {
-        const ang = Math.atan2(dx / d, dz / d) * (180 / Math.PI);
-        h.rotation.y += (((ang + 180) - h.rotation.y + 540) % 360) - 180;
-        if (current !== 'Walk') play('Walk');
-      } else {
-        // 갇힘 — 목표 쪽 한 칸을 옆으로 비켜본다
-        tryStep(Math.cos(ang45(dx, dz)), Math.sin(ang45(dx, dz)), sp);
-        tryStep(-Math.cos(ang45(dx, dz)), -Math.sin(ang45(dx, dz)), sp);
+      // 길을 못 찾겠으면 경로를 다시 계산 (계곡·장애물 우회)
+      npc.stuck += dt;
+      if (npc.stuck > 0.5) {
+        npc.stuck = 0;
+        npc.path = findPath(h.position.x, h.position.z, tx, tz) ?? [];
+        npc.pi = 0;
       }
     }
+    void p0x; void p0z;
   } else if (npc.state === 'work') {
     const ang = Math.atan2(dx, dz) * (180 / Math.PI);
     h.rotation.y += (((ang + 180) - h.rotation.y + 540) % 360) - 180;
@@ -588,10 +761,8 @@ function npcTick(dt: number) {
     if (npc.timer <= 0) finishTask(t);
   }
 }
-const ang45 = (dx: number, dz: number) => Math.atan2(dx, dz) + Math.PI / 2;
 
 function finishTask(t: Task) {
-  const h = (window as unknown as { __hero?: { hero: THREE.Object3D } }).__hero?.hero;
   clearOrdered(t.node);
   if (t.type === 'harvest' && t.node) {
     const list = YIELD[t.node.kind] ?? ['wood'];
@@ -620,7 +791,8 @@ function finishTask(t: Task) {
   saveGame();
   npc.task = null;
   npc.state = 'idle';
-  void h;
+  npc.path = [];
+  npc.pi = 0;
 }
 
 /** 지우개: 건설된 건물 회수 (50% 반환) */
@@ -655,7 +827,7 @@ renderer.domElement.addEventListener('click', (ev) => {
   // 0) 건설 모드면 "지을 수 있는 빈땅" 이 최우선 — 나무가 클릭을 가로채지 못하게
   if (buildIdx >= 0) {
     const def = BUILDS[buildIdx];
-    const chk = p ? buildCheck(wx, wz, def.size) : { ok: false, y: 0, why: '맵 밖' };
+    const chk = p ? buildCheck(wx, wz, def.size, true) : { ok: false, y: 0, why: '맵 밖' };
     if (chk.ok) {
       if (!canAfford(def.cost)) { status.textContent = '재료 부족'; return; }
       tasks.push({ id: ++taskSeq, type: 'build', x: wx, z: wz, kind: def.kind, def });
@@ -725,8 +897,8 @@ function pay(c: Partial<Record<ItemKey, number>>) {
   for (const k of Object.keys(c) as ItemKey[]) inv[k] -= c[k] ?? 0;
 }
 
-/** 건설 가능 여부: 평평 + 물 아님 + 기존 건물/노드와 겹치지 않음 */
-function buildCheck(wx: number, wz: number, size: number): { ok: boolean; y: number; why: string } {
+/** 건설 가능 여부: 평평 + 물 아님 + 겹침 없음 + 크루조가 도달 가능 (18-18) */
+function buildCheck(wx: number, wz: number, size: number, checkReach = false): { ok: boolean; y: number; why: string } {
   const g = groundAt(wx, wz);
   if (g === null) return { ok: false, y: 0, why: '물' };
   if (RULES) {
@@ -754,6 +926,8 @@ function buildCheck(wx: number, wz: number, size: number): { ok: boolean; y: num
       return { ok: false, y: g, why: '이미 건물이 있음' };
     }
   }
+  // 크루조가 못 오르는 곳은 짓지 못한다 (봉우리·절벽에 낀 자리)
+  if (checkReach && !canReach(wx, wz)) return { ok: false, y: g, why: '갈 수 없는 곳' };
   return { ok: true, y: g, why: '' };
 }
 
@@ -801,7 +975,7 @@ renderer.domElement.addEventListener('pointermove', (ev) => {
   if (!p) { ghost.visible = false; return; }
   const b = BUILDS[buildIdx];
   const tx = Math.floor(p[0]) + 0.5, tz = Math.floor(p[1]) + 0.5;
-  const chk = buildCheck(tx, tz, b.size);
+  const chk = buildCheck(tx, tz, b.size, true);
   const y = groundAt(tx, tz);
   ghost.visible = y !== null;
   ghost.position.set(tx, (y ?? 0) + 0.06, tz);
@@ -845,6 +1019,7 @@ function loadRules(seed: string) {
         elev: dec(j.elev, Float32Array), steep: dec(j.steep, Uint8Array), ramp: dec(j.ramp, Uint8Array),
       };
       (window as unknown as { __rules?: IslandRules }).__rules = RULES;
+      invalidateWalkMap();
       spawnNodes();                                  // 노드 배치(프롭 로드 대기 중이면 자동)
       if (hero) placeAtSpawn();
     })
@@ -969,5 +1144,6 @@ renderer.setAnimationLoop((t) => {
 (window as unknown as { __three?: unknown }).__three = {
   scene, camera, renderer, controls, groundMeshes, groundAt, isGrounded: () => grounded, tick,
   THREE, get RULES() { return RULES; }, get hero() { return hero; }, propNodes, built, tasks,
-  orderHarvest, buildCheck, BUILDS, respawnQ, get buildIdx() { return buildIdx; },
+  orderHarvest, buildCheck, BUILDS, respawnQ, findPath, canReach, npc,
+  get buildIdx() { return buildIdx; },
 };
