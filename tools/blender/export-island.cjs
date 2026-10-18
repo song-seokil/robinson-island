@@ -12,7 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const { generateIsland } = require('./_bundle.cjs');
 
-const MAP = 68, TILE = 32;
+const TILE = 32;
 const seed = Number(process.argv[2] || 824934);
 const RES = Number(process.argv[3] || 1088);
 
@@ -39,6 +39,7 @@ function upsample(src, N) {
 }
 
 const isl = generateIsland(seed);
+const MAP = Math.round(Math.sqrt(isl.tiles.length));   // config 의 MAP_T 을 따른다
 const shape = upsample(isl.shape, RES);
 const moist = upsample(isl.moist, RES);
 

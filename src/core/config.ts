@@ -15,7 +15,7 @@
 
 // ---------- 월드 ----------
 export const TILE = 32;
-export const MAP_TILES = 68;
+export const MAP_TILES = 56;   // 18-14: CoC 섬 크기(≈1,200타일)에 맞춘 맵 (빈 바다 63%)
 export const WORLD_W = TILE * MAP_TILES;
 export const WORLD_H = TILE * MAP_TILES;
 

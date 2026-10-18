@@ -85,7 +85,7 @@ const CX = WORLD / 2, CZ = WORLD / 2;
 if (CLOSE_UP) {
   camera.position.set(CX - 5.5, 4.2, CZ + 7.5);   // 생존자 클로즈업
 } else {
-  camera.position.set(CX - 34, 46, CZ + 62);
+  camera.position.set(CX - 26, 34, CZ + 48);
 }
 
 const controls = new OrbitControls(camera, canvas);
@@ -93,49 +93,56 @@ controls.target.set(CX, CLOSE_UP ? 1.0 : 0, CZ);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 // 맵 고정 + 줌인아웃 (18-15)
-controls.minDistance = 18;
-controls.maxDistance = 150;
-// CoC 규칙: 맵은 고정. 팬(맵 이동) 금지 — 확대해도 섬이 화면 중앙에 남는다
-controls.enablePan = false;
-// 지평선 아래로 안 내려간다 — 항상 "지도 보는 각도"를 유지
-controls.maxPolarAngle = Math.PI * 0.42;
-controls.minPolarAngle = Math.PI * 0.10;
-// ---- 360° 자유 회전: 지면 아래로만 못 내려감 (0° = 정수평, 90° = 수평)
-controls.maxPolarAngle = Math.PI * 0.42;
-controls.minPolarAngle = Math.PI * 0.10;
+controls.minDistance = 14;
+controls.maxDistance = 84;
+// CoC 규칙: 회전 불가. 드래그 = 팬(확대된 화면 안에서 이동), 휠 = 줌
+controls.enableRotate = false;
+controls.enablePan = true;
 controls.screenSpacePanning = false;
-controls.rotateSpeed = 0.85;
+controls.panSpeed = 0.7;
 controls.zoomSpeed = 0.9;
 
-// ---- 시점 프리셋 (18-15): 맵 고정 + 줌인아웃. 캐릭터에 고정되지 않는다 ----
-//  CoC 방식 — 섬 중심 고정. 카메라는 맵 위를 돌아다니며 확대/축소만 한다.
+// ---- 시점 프리셋 (18-15): 맵 고정 · 회전 불가 · 팬 + 줌만 ----
+//  CoC 방식 — 각도는 고정. 확대된 화면 안에서 드래그로 이동만 한다.
 const VIEW_PRESETS = [
-  { name: '맵 기본', polar: Math.PI * 0.32, azim: Math.PI * 0.22, dist: 76, pan: 0 },
-  { name: '확대', polar: Math.PI * 0.31, azim: Math.PI * 0.22, dist: 36, pan: 0 },
-  { name: '지역 보기', polar: Math.PI * 0.30, azim: Math.PI * 0.22, dist: 23, pan: 1 },
-  { name: '살짝 돌려보기', polar: Math.PI * 0.33, azim: Math.PI * 0.50, dist: 76, pan: 0 },
-  { name: '고개俯視', polar: Math.PI * 0.10, azim: Math.PI * 0.22, dist: 88, pan: 0 },
+  { name: '맵 전체', dist: 64, pan: 0 },
+  { name: '기본', dist: 44, pan: 0 },
+  { name: '확대', dist: 28, pan: 0 },
+  { name: '지역 보기', dist: 18, pan: 1 },
 ];
-let presetIdx = 0;
+const CAM_POLAR = Math.PI * 0.32;      // 고정 부감각
+const CAM_AZIM = Math.PI * 0.22;
+let presetIdx = 1;
 function applyPreset(i: number) {
   const p = VIEW_PRESETS[(i + VIEW_PRESETS.length) % VIEW_PRESETS.length];
   presetIdx = (i + VIEW_PRESETS.length) % VIEW_PRESETS.length;
   const t = p.pan && hero ? panTo(hero.position.x, hero.position.y, hero.position.z)
                           : new THREE.Vector3(CX, 0, CZ);
   const off = new THREE.Vector3(
-    Math.sin(p.azim) * Math.cos(p.polar),
-    Math.sin(p.polar),
-    Math.cos(p.azim) * Math.cos(p.polar),
+    Math.sin(CAM_AZIM) * Math.cos(CAM_POLAR),
+    Math.sin(CAM_POLAR),
+    Math.cos(CAM_AZIM) * Math.cos(CAM_POLAR),
   ).multiplyScalar(p.dist);
   camTween = { from: camera.position.clone(), to: t.clone().add(off), t: 0, target: t.clone() };
 }
 
-/** 월드좌표 → 맵 중심 기준 화면 배율(x,y,z = -1..1) */
+/** 팬은 섬 주변으로만 — 섬 밖으로 사라지지 않는다 */
+const PAN_LIM = WORLD * 0.26;
+function clampPan() {
+  const t = controls.target;
+  t.x = Math.max(CX - PAN_LIM, Math.min(CX + PAN_LIM, t.x));
+  t.z = Math.max(CZ - PAN_LIM, Math.min(CZ + PAN_LIM, t.z));
+  t.y = 0;
+}
+
+/** 월드좌표 → 화면 팬 목표(맵 중심 기준) */
 function panTo(wx: number, wy: number, wz: number): THREE.Vector3 {
-  const u = Math.max(-0.42, Math.min(0.42, wx / WORLD));
-  const v = Math.max(-0.42, Math.min(0.42, wz / WORLD));
-  const n = WORLD / 2;
-  return new THREE.Vector3(CX + u * n, 0, CZ + v * n);
+  const lim = PAN_LIM;
+  return new THREE.Vector3(
+    Math.max(CX - lim, Math.min(CX + lim, wx)),
+    0,
+    Math.max(CZ - lim, Math.min(CZ + lim, wz)),
+  );
 }
 const heroPosX = () => (hero ? hero.position.x : 0);
 const heroPosY = () => (hero ? hero.position.y + 0.85 : 0);
@@ -324,7 +331,8 @@ let propsRoot: THREE.Object3D | null = null;
 const propTemplates = new Map<string, THREE.Object3D>();
 const propNodes: { kind: string; x: number; z: number; y: number; obj: THREE.Object3D }[] = [];
 
-const PROP_KINDS = ['tree', 'palm', 'berry', 'shell', 'rock', 'ore', 'tar', 'crystal'];
+const PROP_KINDS = ['tree', 'palm', 'berry', 'shell', 'rock', 'ore', 'tar', 'crystal',
+  'b_campfire', 'b_hut', 'b_storage', 'b_wall', 'b_tower'];
 gltf.load('/glb/props3d.glb', (g) => {
   propsRoot = g.scene;
   // 1) 툰 + 외곽선 (복제본이 함께 따라가도록 먼저)
@@ -367,6 +375,227 @@ function spawnNodes() {
   (window as unknown as { __propCounts?: unknown }).__propCounts = counts;
   console.log('[props] placed', propNodes.length, JSON.stringify(counts));
 }
+
+// ---------- 인벤토리 + 채집 (게임의 심장) ----------
+const ITEM = {
+  wood: { icon: '🪵', name: '목재' },
+  stone: { icon: '🪨', name: '돌' },
+  food: { icon: '🍖', name: '먹이' },
+  oil: { icon: '🛢️', name: '석유' },
+  crystal: { icon: '💎', name: '수정' },
+} as const;
+type ItemKey = keyof typeof ITEM;
+
+/** 노드 종류별 획득량 (게임 규칙과 동일하게) */
+const YIELD: Record<string, ItemKey[]> = {
+  tree: ['wood', 'wood', 'wood'], palm: ['wood', 'wood', 'food'], berry: ['food', 'food'],
+  shell: ['food'], rock: ['stone', 'stone', 'stone'], ore: ['stone', 'stone', 'crystal'],
+  tar: ['oil', 'oil'], crystal: ['crystal'],
+};
+
+const SAVE_KEY = 'robinson3d_v1';
+const inv: Record<ItemKey, number> = { wood: 0, stone: 0, food: 0, oil: 0, crystal: 0 };
+let harvested = 0;
+
+function loadSave() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    for (const k of Object.keys(inv) as ItemKey[]) inv[k] = s.inv?.[k] ?? 0;
+    harvested = s.harvested ?? 0;
+  } catch { /* 처음 실행 */ }
+}
+function saveGame() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ inv, harvested, seed })); } catch { /* 무시 */ }
+}
+loadSave();
+
+/** 무텍스트 규칙: 숫자만. 아이콘 + 개수 */
+const HUD = document.getElementById('inv') as HTMLDivElement;
+function paintHUD() {
+  if (!HUD) return;
+  const parts: string[] = [];
+  for (const k of Object.keys(inv) as ItemKey[]) {
+    if (inv[k] <= 0) continue;
+    parts.push(`<span class="i">${ITEM[k].icon}</span><b>${inv[k]}</b>`);
+  }
+  HUD.innerHTML = parts.length ? parts.join('') : '<span class="empty">—</span>';
+}
+paintHUD();
+
+/** 반경 안의 가장 가까운 노드 */
+function nearestNode(): (typeof propNodes)[number] | null {
+  if (!hero || !propNodes.length) return null;
+  let best: (typeof propNodes)[number] | null = null;
+  let bd = 2.2 * 2.2;                      // 2.2 유닛 반경
+  for (const n of propNodes) {
+    if (!n.obj.visible) continue;
+    const d = (n.x - hero.position.x) ** 2 + (n.z - hero.position.z) ** 2;
+    if (d < bd) { bd = d; best = n; }
+  }
+  return best;
+}
+
+let target: (typeof propNodes)[number] | null = null;
+let harvT = 0;
+
+function doHarvest() {
+  if (!target) return;
+  const list = YIELD[target.kind] ?? ['wood'];
+  for (const k of list) inv[k] += 1;
+  harvested += 1;
+  // 노드 사라짐 (스케일 축소 후 제거)
+  const obj = target.obj;
+  obj.userData.dying = 0.001;
+  target = null;
+  harvT = 0.32;
+  saveGame();
+  paintHUD();
+  status.textContent = `채집! (+${list.map((k) => ITEM[k].icon).join('')})`;
+}
+
+function updateHarvest(dt: number) {
+  target = nearestNode();
+  if (target && harvT <= 0 && buildIdx < 0) status.textContent = `E 채집 (${target.kind})`;
+  if (harvT > 0) harvT -= dt;
+  // 사라지는 애니메이션
+  for (let i = propNodes.length - 1; i >= 0; i--) {
+    const n = propNodes[i];
+    const ud = n.obj.userData;
+    if (ud.dying !== undefined) {
+      ud.dying += dt * 3.2;
+      const s = Math.max(0.0001, 1 - ud.dying);
+      n.obj.scale.setScalar(s);
+      n.obj.rotation.y += dt * 6;
+      if (s <= 0.02) {
+        scene.remove(n.obj);
+        propNodes.splice(i, 1);
+      }
+    }
+  }
+}
+const ITEM_WALL = '';
+
+// ---------- 건설 (BUILD) ----------
+interface BuildDef {
+  kind: string; name: string; cost: Partial<Record<ItemKey, number>>; size: number;
+}
+const BUILDS: BuildDef[] = [
+  { kind: 'b_campfire', name: '모닥불', cost: { wood: 4, stone: 2 }, size: 1 },
+  { kind: 'b_hut', name: '오두막', cost: { wood: 12, stone: 4 }, size: 2 },
+  { kind: 'b_storage', name: '창고', cost: { wood: 16, stone: 6 }, size: 2 },
+  { kind: 'b_wall', name: '울타리', cost: { wood: 6, stone: 2 }, size: 1 },
+  { kind: 'b_tower', name: '감시탑', cost: { wood: 20, stone: 14 }, size: 2 },
+];
+let buildIdx = -1;                       // -1 = 건설 모드 아님
+const ghost = new THREE.Mesh(
+  new THREE.BoxGeometry(1, 0.1, 1),
+  new THREE.MeshBasicMaterial({ color: 0x7CFC9A, transparent: true, opacity: 0.45 }),
+);
+ghost.visible = false;
+scene.add(ghost);
+const built: { kind: string; x: number; z: number; obj: THREE.Object3D }[] = [];
+
+function canAfford(c: Partial<Record<ItemKey, number>>) {
+  for (const k of Object.keys(c) as ItemKey[]) if (inv[k] < (c[k] ?? 0)) return false;
+  return true;
+}
+function pay(c: Partial<Record<ItemKey, number>>) {
+  for (const k of Object.keys(c) as ItemKey[]) inv[k] -= c[k] ?? 0;
+}
+
+/** 건설 가능 여부: 평평 + 물 아님 + 기존 건물/노드와 겹치지 않음 */
+function buildCheck(wx: number, wz: number, size: number): { ok: boolean; y: number; why: string } {
+  const g = groundAt(wx, wz);
+  if (g === null) return { ok: false, y: 0, why: '물' };
+  if (RULES) {
+    const tx = Math.floor(wx), tz = Math.floor(wz);
+    const m = RULES.map;
+    const half = Math.floor(size / 2);
+    for (let dz = -half; dz <= half; dz++) {
+      for (let dx = -half; dx <= half; dx++) {
+        const x = tx + dx, z = tz + dz;
+        if (x < 0 || z < 0 || x >= m || z >= m) return { ok: false, y: g, why: '맵 밖' };
+        const i = z * m + x;
+        if (RULES.steep[i]) return { ok: false, y: g, why: '절벽 위' };
+        if (RULES.elev[i] < 0.05) return { ok: false, y: g, why: '물 위' };
+      }
+    }
+  }
+  // 노드/건물과 겹침
+  for (const n of propNodes) {
+    if (Math.abs(n.x - wx) < size * 0.7 && Math.abs(n.z - wz) < size * 0.7) {
+      return { ok: false, y: g, why: '자리에 장애물' };
+    }
+  }
+  for (const p of built) {
+    if (Math.abs(p.x - wx) < size * 0.8 && Math.abs(p.z - wz) < size * 0.8) {
+      return { ok: false, y: g, why: '이미 건물이 있음' };
+    }
+  }
+  return { ok: true, y: g, why: '' };
+}
+
+function enterBuildMode() {
+  buildIdx = (buildIdx + 1) % BUILDS.length;
+  const b = BUILDS[buildIdx];
+  status.textContent = `건설: ${b.name} (${Object.entries(b.cost).map(([k, v]) => ITEM[k as ItemKey].icon + v).join('')})`
+    + ` · 클릭/Enter로 짓기 · B 취소`;
+  ghost.visible = false;
+}
+function exitBuildMode() { buildIdx = -1; ghost.visible = false; }
+
+function placeBuilding() {
+  if (buildIdx < 0 || !hero) return;
+  const b = BUILDS[buildIdx];
+  const wx = Math.round(hero.position.x), wz = Math.round(hero.position.z);
+  const chk = buildCheck(wx, wz, b.size);
+  if (!chk.ok) { status.textContent = `여기론 못 지음 — ${chk.why}`; return; }
+  if (!canAfford(b.cost)) {
+    status.textContent = `재료 부족 (${Object.entries(b.cost).map(([k, v]) => ITEM[k as ItemKey].icon + v).join('')})`;
+    return;
+  }
+  const tpl = propTemplates.get(b.kind);
+  if (!tpl) { status.textContent = '모델 없음: ' + b.kind; return; }
+  pay(b.cost);
+  const inst = tpl.clone(true);
+  inst.position.set(wx, chk.y, wz);
+  inst.visible = true;
+  scene.add(inst);
+  built.push({ kind: b.kind, x: wx, z: wz, obj: inst });
+  saveGame();
+  paintHUD();
+  status.textContent = `${b.name} 완성!`;
+}
+
+/** Pointer = 지도 위 위치 계산 (건설 모드 미리보기) */
+function pointerToWorld(ev: PointerEvent): [number, number] | null {
+  const r = renderer.domElement.getBoundingClientRect();
+  const nd = new THREE.Vector2(
+    ((ev.clientX - r.left) / r.width) * 2 - 1,
+    -((ev.clientY - r.top) / r.height) * 2 + 1,
+  );
+  const rc = new THREE.Raycaster();
+  rc.setFromCamera(nd, camera);
+  const hit = rc.intersectObjects(groundMeshes, false)[0];
+  return hit ? [hit.point.x, hit.point.z] : null;
+}
+renderer.domElement.addEventListener('pointermove', (ev) => {
+  if (buildIdx < 0) { ghost.visible = false; return; }
+  const p = pointerToWorld(ev);
+  if (!p) { ghost.visible = false; return; }
+  const b = BUILDS[buildIdx];
+  const wx = Math.round(p[0]), wz = Math.round(p[1]);
+  const chk = buildCheck(wx, wz, b.size);
+  const y = groundAt(wx + 0.5, wz + 0.5);
+  ghost.visible = y !== null;
+  ghost.position.set(wx + 0.5, (y ?? 0) + 0.06, wz + 0.5);
+  ghost.scale.set(b.size, 1, b.size);
+  (ghost.material as THREE.MeshBasicMaterial).color.setHex(chk.ok ? 0x7CFC9A : 0xFF5A5A);
+  status.textContent = `건설: ${b.name} · ${chk.ok ? '가능' : chk.why}`;
+});
+renderer.domElement.addEventListener('click', () => { if (buildIdx >= 0) placeBuilding(); });
 
 // ---------- 지형 위에서 걷기 (레이캐스트로 높이 샘플) ----------
 const ray = new THREE.Raycaster();
@@ -523,6 +752,10 @@ function resize() {
 window.addEventListener('resize', resize);
 
 window.addEventListener('keydown', (e) => {
+  if (e.code === 'KeyE' || e.code === 'Space') { e.preventDefault(); doHarvest(); return; }
+  if (e.code === 'KeyB') { e.preventDefault(); enterBuildMode(); return; }
+  if (e.code === 'Enter') { e.preventDefault(); placeBuilding(); return; }
+  if (e.code === 'Escape') { exitBuildMode(); return; }
   const n = KEYS[e.key];
   if (n) { play(n, n !== 'Attack' && n !== 'Hit'); return; }
   if (MOVE[e.code]) held.add(e.code);
@@ -534,6 +767,7 @@ let prev = performance.now();
 /** 한 프레임 진행 — RAF 없이도手动으로 돌릴 수 있게 노출(테스트/백그라운드 탭용) */
 export function tick(dt = 1 / 60) {
   stepHero(dt);
+  updateHarvest(dt);
   if (camTween) {
     camTween.t = Math.min(1, camTween.t + dt * 2.2);
     const e = 1 - Math.pow(1 - camTween.t, 3);
@@ -543,6 +777,7 @@ export function tick(dt = 1 / 60) {
   }
   mixer.update(dt);
   controls.update();
+  clampPan();
   renderer.render(scene, camera);
 }
 

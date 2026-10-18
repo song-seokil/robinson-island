@@ -26,7 +26,7 @@ SMOOTH = os.environ.get('B3D_SMOOTH', '0') == '1'
 WATER_GRID = int(os.environ.get('B3D_WGRID', '512'))
 ELEV = math.radians(float(os.environ.get('B3D_ELEV', '0')))   # 카메라 기울기(0 = 탑다운)
 
-MAP = 68
+MAP = int(os.environ.get('B3D_MAP', '0')) or int(json.load(open(os.path.join(DATA, 'meta.json'), encoding='utf-8'))['map'])
 WORLD = float(MAP)          # 1 타일 = 1 BU
 os.makedirs(OUT, exist_ok=True)
 

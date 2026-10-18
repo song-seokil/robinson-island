@@ -192,9 +192,66 @@ def build_crystal():
     ball('gl', (0, -0.30, 0.42), 0.12, (1, 0.6, 1), CRYST2, 8)
 
 
+# ============================================================ 건물
+WOOD = mat('wood_b', (0.52, 0.35, 0.20))
+WOOD2 = mat('wood_b2', (0.66, 0.47, 0.28))
+ROOF = mat('roof', (0.46, 0.24, 0.14))
+STONEW = mat('stone_w', (0.55, 0.53, 0.49))
+FIRE = mat('fire', (1.0, 0.55, 0.12))
+FIRE2 = mat('fire2', (1.0, 0.82, 0.30))
+
+
+def build_campfire():
+    for i in range(7):
+        a = i * 0.9
+        box('s%d' % i, (math.cos(a) * 0.34, math.sin(a) * 0.34, 0.07),
+            (0.14, 0.14, 0.13), STONE, 0.03, rot=(0, 0, a))
+    cone('l1', (-0.16, -0.10, 0.08), (0.18, 0.12, 0.22), 0.055, 0.05, WOOD)
+    cone('l2', (0.14, -0.14, 0.08), (-0.18, 0.14, 0.22), 0.055, 0.05, WOOD)
+    cone('fl1', (0, 0, 0.16), (0.02, 0.01, 0.62), 0.16, 0.05, FIRE, 7)
+    cone('fl2', (0, 0, 0.30), (-0.02, 0.02, 0.52), 0.10, 0.01, FIRE2, 6)
+
+
+def build_hut():
+    bpy.ops.mesh.primitive_cylinder_add(vertices=12, radius=0.86, depth=1.05, location=(0, 0, 0.52))
+    ob = bpy.context.object; ob.name = 'wall'
+    finish(ob, WOOD)
+    bpy.ops.mesh.primitive_cone_add(vertices=12, radius1=1.16, radius2=0.0, depth=0.72, location=(0, 0, 1.40))
+    ob2 = bpy.context.object; ob2.name = 'roof'
+    finish(ob2, ROOF)
+    box('door', (0, -0.84, 0.34), (0.34, 0.10, 0.68), BARK, 0.03)
+    box('post', (0.70, -0.70, 0.60), (0.10, 0.10, 1.20), WOOD2, 0.02)
+
+
+def build_storage():
+    box('c1', (-0.32, 0.10, 0.26), (0.62, 0.62, 0.52), WOOD, 0.04)
+    box('c2', (0.34, -0.12, 0.22), (0.54, 0.54, 0.44), WOOD2, 0.04)
+    box('c3', (0.02, 0.06, 0.66), (0.66, 0.66, 0.30), WOOD, 0.04)
+    cone('roof', (0, 0, 0.80), (0, 0, 1.34), 0.78, 0.05, ROOF, 4)
+
+
+def build_wall():
+    for i in range(4):
+        cone('p%d' % i, (-0.72 + i * 0.48, 0, 0), (-0.72 + i * 0.48, 0, 0.86 + (0.08 if i % 2 else 0)),
+             0.10, 0.075, WOOD, 6)
+    box('rail', (0, 0, 0.52), (1.86, 0.12, 0.12), WOOD2, 0.02)
+
+
+def build_tower():
+    box('base', (0, 0, 0.16), (1.10, 1.10, 0.32), STONEW, 0.04)
+    box('shaft', (0, 0, 0.90), (0.80, 0.80, 1.20), STONEW, 0.04)
+    box('deck', (0, 0, 1.58), (1.14, 1.14, 0.16), WOOD, 0.03)
+    for i, (dx, dy) in enumerate([(-0.48, -0.48), (0.48, -0.48), (-0.48, 0.48), (0.48, 0.48)]):
+        box('p%d' % i, (dx, dy, 1.86), (0.14, 0.14, 0.44), WOOD2, 0.02)
+    cone('roof', (0, 0, 2.02), (0, 0, 2.62), 0.92, 0.04, ROOF, 4)
+
+
 BUILDERS = {
     'tree': build_tree, 'palm': build_palm, 'berry': build_berry, 'shell': build_shell,
     'rock': build_rock, 'ore': build_ore, 'tar': build_tar, 'crystal': build_crystal,
+    # 건물
+    'b_campfire': build_campfire, 'b_hut': build_hut, 'b_storage': build_storage,
+    'b_wall': build_wall, 'b_tower': build_tower,
 }
 for kind, fn in BUILDERS.items():
     group(kind, fn)

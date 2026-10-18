@@ -13,10 +13,21 @@
         background: rgba(6,19,31,.55); padding: 8px 12px; border-radius: 10px;
         pointer-events: none;
       }
+      #inv {
+        position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+        display: flex; gap: 14px; align-items: center;
+        background: rgba(6,19,31,.62); padding: 10px 18px; border-radius: 14px;
+        pointer-events: none; font: 15px/1 system-ui, "Malgun Gothic", sans-serif;
+        color: #fff; box-shadow: 0 4px 18px rgba(0,0,0,.35);
+      }
+      #inv .i { font-size: 19px; margin-right: 5px; }
+      #inv b { font-weight: 700; font-size: 17px; }
+      #inv .empty { opacity: .4; }
     </style>
   </head>
   <body>
-    <div id="hud">로빈슨의 섬 · 3D 시즈</div>
+    <div id="hud">로빈슨의 섬 · 3D</div>
+    <div id="inv"></div>
     <script type="module" src="/src3d/main.ts"></script>
   </body>
 </html>

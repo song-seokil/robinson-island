@@ -81,9 +81,9 @@ export type PassSize = (typeof PASS)[keyof typeof PASS];
  * 육지는 강제하되, 평평면·통행면은 바이옴 구조상 결정적이라 자연스럽게 ±10% 안.
  */
 export const ISLAND_SIZE = {
-  LAND: 857,      // 이분탐색 기준값 (실 육지 ≈ 1000타일, 편차 ±5%)
-  FLAT: 600,
-  RIG: 500,
+  LAND: 1050,     // 이분탐색 기준값 (실 육지 ≈ 1,200타일 ≈ CoC 섬 크기)
+  FLAT: 700,
+  RIG: 560,
 } as const;
 
 export function generateIsland(seed: number): IslandData {
