@@ -416,6 +416,9 @@ export interface NodeKindDef {
   special?: 'crystal';  // 특수 규칙: 성장하지 않고, 캐내면 1/9/99 중 하나
 }
 
+/** 18-16: 자원 밀도 배율. 1 = 원래, 낮출수록 섬이 드문드문 (= 긴장감 유지) */
+export const NODE_DENSITY = 0.42;
+
 export const NODE_KINDS: Record<string, NodeKindDef> = {
   tree:    { name: '나무',        family: 'wood',    drops: [{ item: 'wood', min: 3, max: 5 }], tex: 'n_tree',  radius: 22 },
   palm:    { name: '야자수',      family: 'wood',    drops: [{ item: 'wood', min: 2, max: 4 }, { item: 'food', min: 1, max: 2 }], tex: 'n_palm', radius: 20, onSand: true },

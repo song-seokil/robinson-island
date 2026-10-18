@@ -23,11 +23,31 @@
       #inv .i { font-size: 19px; margin-right: 5px; }
       #inv b { font-weight: 700; font-size: 17px; }
       #inv .empty { opacity: .4; }
+      #bmenu {
+        position: fixed; left: 12px; bottom: 14px; display: flex; gap: 8px;
+        pointer-events: auto;
+      }
+      #bmenu .bi {
+        width: 54px; height: 54px; border: 2px solid rgba(255,255,255,.25);
+        border-radius: 12px; background: rgba(6,19,31,.72); color: #fff;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 2px; cursor: pointer; font: 11px/1 system-ui, "Malgun Gothic", sans-serif;
+      }
+      #bmenu .bi .ic { font-size: 22px; }
+      #bmenu .bi .cst { opacity: .85; font-size: 10px; }
+      #bmenu .bi.on { border-color: #7CFC9A; background: rgba(20,70,45,.85); }
+      #bmenu .bi.poor { opacity: .45; }
+      #tip {
+        position: fixed; right: 12px; bottom: 16px; color: #dff0ff; opacity: .6;
+        font: 11px/1.4 system-ui, "Malgun Gothic", sans-serif; pointer-events: none;
+      }
     </style>
   </head>
   <body>
     <div id="hud">로빈슨의 섬 · 3D</div>
     <div id="inv"></div>
+    <div id="bmenu"></div>
+    <div id="tip">노드 클릭 = 채집 지시 · 하단 메뉴 = 건설 · 건물 클릭 = 철거<br>크루조가 알아서 이동합니다</div>
     <script type="module" src="/src3d/main.ts"></script>
   </body>
 </html>

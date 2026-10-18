@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { C, FAMILIES, Family, NODE_KINDS, TILE, MAP_TILES, VIEW_H, WORLD_W, WORLD_H } from '../core/config';
+import { C, FAMILIES, Family, NODE_KINDS, NODE_DENSITY, TILE, MAP_TILES, VIEW_H, WORLD_W, WORLD_H } from '../core/config';
 import { RNG, ValueNoise } from '../core/rng';
 
 /**
@@ -616,16 +616,16 @@ let hasRiver = false;
   const spawnIdx = Math.floor(rng.next() * Math.max(1, beach.length));
   const spawn = beach[spawnIdx] ?? { x: WORLD_W / 2, y: WORLD_H / 2 };
 
-  // ---- 4) 노드 배치 ----
+  // ---- 4) 노드 배치 (18-16: 드문편하게 — 자원이 많아야 interestingly 보인다) ----
   const nodes: NodeSpec[] = [];
   const counts: Record<string, number> = {};
   const addNode = (kind: string, tx: number, ty: number) => {
     const s = NODE_KINDS[kind];
     if (!s) return;
-    // 점유 검사 (너무 붙어 있지 않게)
+    // 점유 검사 (너무 붙어 있지 않게) — 간격도 넓힌다
     const px = tx * TILE + TILE / 2, py = ty * TILE + TILE / 2;
     for (const n of nodes) {
-      if (Math.abs(n.x - px) < 44 && Math.abs(n.y - py) < 44) return;
+      if (Math.abs(n.x - px) < 62 && Math.abs(n.y - py) < 62) return;
     }
     nodes.push({ id: nodes.length, kind, x: px, y: py });
     counts[kind] = (counts[kind] ?? 0) + 1;
@@ -633,6 +633,7 @@ let hasRiver = false;
 
   const densityNoise = new ValueNoise((seed * 31337) >>> 0, 20);
   const b = (f: Family) => bonus[f] ?? 1;
+  const D = NODE_DENSITY;      // 0.45 = 기본 밀도의 45%
 
   for (let y = 2; y < MAP_TILES - 2; y++) {
     for (let x = 2; x < MAP_TILES - 2; x++) {
@@ -643,25 +644,25 @@ let hasRiver = false;
 
       if (t === T.SAND || t === T.SAND_WET) {
         // 야자수: 해변 (드물게)
-        if (r < 0.020 * b('wood') * (0.7 + dn)) addNode('palm', x, y);
+        if (r < 0.020 * D * b('wood') * (0.7 + dn)) addNode('palm', x, y);
         continue;
       }
       if (t === T.JUNGLE) {
-        if (r < 0.085 * b('wood') * (0.6 + dn)) addNode('tree', x, y);
-        else if (r < 0.105 * b('oil')) addNode('tar', x, y);
+        if (r < 0.085 * D * b('wood') * (0.6 + dn)) addNode('tree', x, y);
+        else if (r < 0.100 * D * b('oil')) addNode('tar', x, y);
         continue;
       }
       if (t === T.GRASS) {
-        if (r < 0.030 * b('wood') * (0.6 + dn)) addNode('tree', x, y);
-        else if (r < 0.046 * b('stone') * (0.6 + dn)) addNode('rock', x, y);
-        else if (r < 0.058 * b('oil')) addNode('tar', x, y);
-        else if (r < 0.064 * b('stone')) addNode('ore', x, y);
+        if (r < 0.030 * D * b('wood') * (0.6 + dn)) addNode('tree', x, y);
+        else if (r < 0.044 * D * b('stone') * (0.6 + dn)) addNode('rock', x, y);
+        else if (r < 0.055 * D * b('oil')) addNode('tar', x, y);
+        else if (r < 0.060 * D * b('stone')) addNode('ore', x, y);
         continue;
       }
       if (t === T.ROCK) {
-        if (r < 0.060 * b('stone') * (0.6 + dn)) addNode('rock', x, y);
-        else if (r < 0.085 * b('stone')) addNode('ore', x, y);
-        else if (r < 0.095 * b('oil')) addNode('tar', x, y);
+        if (r < 0.060 * D * b('stone') * (0.6 + dn)) addNode('rock', x, y);
+        else if (r < 0.082 * D * b('stone')) addNode('ore', x, y);
+        else if (r < 0.090 * D * b('oil')) addNode('tar', x, y);
         continue;
       }
     }

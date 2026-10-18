@@ -102,29 +102,10 @@ controls.screenSpacePanning = false;
 controls.panSpeed = 0.7;
 controls.zoomSpeed = 0.9;
 
-// ---- 시점 프리셋 (18-15): 맵 고정 · 회전 불가 · 팬 + 줌만 ----
+// ---- 카메라 (18-15): 맵 고정 · 회전 불가 · 팬 + 줌만 ----
 //  CoC 방식 — 각도는 고정. 확대된 화면 안에서 드래그로 이동만 한다.
-const VIEW_PRESETS = [
-  { name: '맵 전체', dist: 64, pan: 0 },
-  { name: '기본', dist: 44, pan: 0 },
-  { name: '확대', dist: 28, pan: 0 },
-  { name: '지역 보기', dist: 18, pan: 1 },
-];
 const CAM_POLAR = Math.PI * 0.32;      // 고정 부감각
 const CAM_AZIM = Math.PI * 0.22;
-let presetIdx = 1;
-function applyPreset(i: number) {
-  const p = VIEW_PRESETS[(i + VIEW_PRESETS.length) % VIEW_PRESETS.length];
-  presetIdx = (i + VIEW_PRESETS.length) % VIEW_PRESETS.length;
-  const t = p.pan && hero ? panTo(hero.position.x, hero.position.y, hero.position.z)
-                          : new THREE.Vector3(CX, 0, CZ);
-  const off = new THREE.Vector3(
-    Math.sin(CAM_AZIM) * Math.cos(CAM_POLAR),
-    Math.sin(CAM_POLAR),
-    Math.cos(CAM_AZIM) * Math.cos(CAM_POLAR),
-  ).multiplyScalar(p.dist);
-  camTween = { from: camera.position.clone(), to: t.clone().add(off), t: 0, target: t.clone() };
-}
 
 /** 팬은 섬 주변으로만 — 섬 밖으로 사라지지 않는다 */
 const PAN_LIM = WORLD * 0.26;
@@ -135,7 +116,7 @@ function clampPan() {
   t.y = 0;
 }
 
-/** 월드좌표 → 화면 팬 목표(맵 중심 기준) */
+/** 월드좌표 → 팬 목표 (맵 경계 안으로 제한) */
 function panTo(wx: number, wy: number, wz: number): THREE.Vector3 {
   const lim = PAN_LIM;
   return new THREE.Vector3(
@@ -149,10 +130,6 @@ const heroPosY = () => (hero ? hero.position.y + 0.85 : 0);
 const heroPosZ = () => (hero ? hero.position.z : 0);
 void heroPosX; void heroPosY; void heroPosZ;
 let camTween: { from: THREE.Vector3; to: THREE.Vector3; t: number; target?: THREE.Vector3 } | null = null;
-window.addEventListener('keydown', (e) => {
-  if (e.code === 'KeyV') applyPreset(presetIdx + 1);
-  if (e.code === 'KeyB') applyPreset(presetIdx - 1);
-});
 
 // ---------- 조명(우리 아트 방향: 좌상단, 낮은 태양) ----------
 const hemi = new THREE.HemisphereLight(0xbfe0ff, 0x4a6a48, 0.85);
@@ -200,6 +177,11 @@ gltf.load(`/glb/island_${seed}.glb`, (g) => {
     o.receiveShadow = true;
     if ((o as THREE.Mesh).isMesh) groundMeshes.push(o as THREE.Mesh);
   });
+  // 섬 GLB 의 물판은 맵 크기의 정사각형이라 판떡이 된다 → 숨긴다(지평선 바다가 대신한다)
+  if (groundMeshes.length > 1) {
+    const water = groundMeshes.reduce((a, b) => (a.geometry.attributes.position.count <= b.geometry.attributes.position.count ? a : b));
+    water.visible = false;
+  }
   scene.add(root);
   // 좌표 규약 맞춤: 지형의 최소 모서리를 (0,0,0) 으로 옮긴다 (바다면 = y 0)
   // (Blender Z-up → glTF Y-up 변환 때문에 섬이 z<0 에 놓여 있다)
@@ -293,12 +275,6 @@ const mixer = new AnimationMixer(scene);
 let hero: THREE.Object3D | null = null;
 let clips: THREE.AnimationClip[] = [];
 let current = '';
-const KEYS: Record<string, string> = { '1': 'Idle', '2': 'Walk', '3': 'Attack', '4': 'Hit' };
-const MOVE: Record<string, [number, number]> = {
-  KeyW: [0, -1], KeyS: [0, 1], KeyA: [-1, 0], KeyD: [1, 0],
-  ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
-};
-const held = new Set<string>();
 
 function play(name: string, loop = true) {
   if (!hero) return;
@@ -310,7 +286,7 @@ function play(name: string, loop = true) {
   if (!loop) act.setLoop(THREE.LoopOnce, 1);
   act.clampWhenFinished = !loop;
   current = name;
-  status.textContent = `로빈슨 · ${name} · WASD 이동 / 1-4 동작`;
+  status.textContent = `로빈슨 · ${name === 'Walk' ? '이동' : name === 'Attack' ? '작업' : '대기'}`;
 }
 
 // 생존자 3상태 — 0 난파 / 1 1일차 / 2 적응완료
@@ -424,41 +400,52 @@ function paintHUD() {
 }
 paintHUD();
 
-/** 반경 안의 가장 가까운 노드 */
-function nearestNode(): (typeof propNodes)[number] | null {
-  if (!hero || !propNodes.length) return null;
-  let best: (typeof propNodes)[number] | null = null;
-  let bd = 2.2 * 2.2;                      // 2.2 유닛 반경
-  for (const n of propNodes) {
-    if (!n.obj.visible) continue;
-    const d = (n.x - hero.position.x) ** 2 + (n.z - hero.position.z) ** 2;
-    if (d < bd) { bd = d; best = n; }
-  }
-  return best;
+// ============================================================
+//  느린 재성장 (18-16): 자원은 많지 않고, 되살아나도 아주 천천히
+// ============================================================
+
+// ============================================================
+//  느린 재성장 (18-16): 자원은 많지 않고, 되살아나도 아주 천천히
+// ============================================================
+const RESPAWN_T = 210;   // 3분 30초 — "많이 리스폰" 이 아니라 끝자락에서 하나씩
+const respawnQ: { kind: string; x: number; z: number; y: number; t: number }[] = [];
+
+function queueRespawn(n: (typeof propNodes)[number]) {
+  respawnQ.push({ kind: n.kind, x: n.x, z: n.z, y: n.y, t: RESPAWN_T });
 }
 
-let target: (typeof propNodes)[number] | null = null;
-let harvT = 0;
-
-function doHarvest() {
-  if (!target) return;
-  const list = YIELD[target.kind] ?? ['wood'];
-  for (const k of list) inv[k] += 1;
-  harvested += 1;
-  // 노드 사라짐 (스케일 축소 후 제거)
-  const obj = target.obj;
-  obj.userData.dying = 0.001;
-  target = null;
-  harvT = 0.32;
-  saveGame();
-  paintHUD();
-  status.textContent = `채집! (+${list.map((k) => ITEM[k].icon).join('')})`;
+function updateRespawn(dt: number) {
+  for (let i = respawnQ.length - 1; i >= 0; i--) {
+    const r = respawnQ[i];
+    r.t -= dt;
+    if (r.t > 0) continue;
+    respawnQ.splice(i, 1);
+    const tpl = propTemplates.get(r.kind);
+    if (!tpl) continue;
+    const gy = groundAt(r.x, r.z);
+    if (gy === null) continue;
+    const inst = tpl.clone(true);
+    inst.position.set(r.x, (gy ?? r.y) - 0.04, r.z);
+    inst.rotation.y = (r.x * 3.1 + r.z * 1.7) % (Math.PI * 2);
+    inst.scale.setScalar(0.62);          // 어린 풀로 돋아난다 → 2초에 걸쳐 자람
+    inst.visible = true;
+    inst.userData.grow = 0;
+    scene.add(inst);
+    propNodes.push({ kind: r.kind, x: r.x, z: r.z, y: gy, obj: inst });
+  }
+  // 성장 애니메이션
+  for (const n of propNodes) {
+    const g = n.obj.userData.grow;
+    if (g === undefined) continue;
+    const k = Math.min(1, g + dt / 2.5);
+    n.obj.scale.setScalar(0.62 + 0.38 * k);
+    n.obj.userData.grow = k;
+    if (k >= 1) delete n.obj.userData.grow;
+  }
 }
 
 function updateHarvest(dt: number) {
-  target = nearestNode();
-  if (target && harvT <= 0 && buildIdx < 0) status.textContent = `E 채집 (${target.kind})`;
-  if (harvT > 0) harvT -= dt;
+  updateRespawn(dt);
   // 사라지는 애니메이션
   for (let i = propNodes.length - 1; i >= 0; i--) {
     const n = propNodes[i];
@@ -469,6 +456,8 @@ function updateHarvest(dt: number) {
       n.obj.scale.setScalar(s);
       n.obj.rotation.y += dt * 6;
       if (s <= 0.02) {
+        clearOrdered(n);
+        queueRespawn(n);
         scene.remove(n.obj);
         propNodes.splice(i, 1);
       }
@@ -477,16 +466,247 @@ function updateHarvest(dt: number) {
 }
 const ITEM_WALL = '';
 
+// ============================================================
+//  명령 시스템 — 플레이어는 "지시"하고 크루조가 알아서 간다 (CoC 방식)
+// ============================================================
+type Task = {
+  id: number; type: 'harvest' | 'build';
+  node?: (typeof propNodes)[number];
+  x: number; z: number; kind?: string; def?: BuildDef;
+};
+const tasks: Task[] = [];
+let taskSeq = 0;
+const npc = { task: null as Task | null, state: 'idle' as 'idle' | 'walk' | 'work', timer: 0 };
+
+/** 한 칸 이동 시도 (기존 이동 규칙 재사용) */
+function tryStep(dx: number, dz: number, dist: number): boolean {
+  const hero = window.__three ? (window as unknown as { __hero?: { hero: THREE.Object3D } }).__hero?.hero : null;
+  if (!hero) return false;
+  const SUB = 4;
+  const ax = dx * (dist / SUB), az = dz * (dist / SUB);
+  let moved = false;
+  for (let s = 0; s < SUB; s++) {
+    const g = groundAt(hero.position.x + ax, hero.position.z + az);
+    if (g !== null && (!RULES || walkable(Math.floor(hero.position.x + ax), Math.floor(hero.position.z + az)))
+        && Math.abs(hero.position.y - g) <= dist * 0.62) {
+      hero.position.set(hero.position.x + ax, g, hero.position.z + az); moved = true; continue;
+    }
+    const gx = groundAt(hero.position.x + ax, hero.position.z);
+    if (gx !== null && (!RULES || walkable(Math.floor(hero.position.x + ax), Math.floor(hero.position.z)))) {
+      hero.position.x += ax; hero.position.y = gx; moved = true; continue;
+    }
+    const gz = groundAt(hero.position.x, hero.position.z + az);
+    if (gz !== null && (!RULES || walkable(Math.floor(hero.position.x), Math.floor(hero.position.z + az)))) {
+      hero.position.z += az; hero.position.y = gz; moved = true; continue;
+    }
+    break;
+  }
+  return moved;
+}
+
+function nearestIdleTask(): Task | null {
+  const h = (window as unknown as { __hero?: { hero: THREE.Object3D } }).__hero?.hero;
+  if (!h || !tasks.length) return null;
+  let bi = 0, bd = Infinity;
+  for (let i = 0; i < tasks.length; i++) {
+    const t = tasks[i];
+    const tx = t.node ? t.node.x : t.x, tz = t.node ? t.node.z : t.z;
+    const d = (tx - h.position.x) ** 2 + (tz - h.position.z) ** 2;
+    if (d < bd) { bd = d; bi = i; }
+  }
+  return tasks.splice(bi, 1)[0];
+}
+
+// ---- 채집 지시 마커 (노드 위에 뜨는 화살표) ----
+const ORDER_GEO = new THREE.ConeGeometry(0.34, 0.62, 4);
+const orderMarkers = new Map<THREE.Object3D, THREE.Mesh>();
+function markOrdered(n: (typeof propNodes)[number], color = 0xffe27a) {
+  if (orderMarkers.has(n.obj)) return;
+  const m = new THREE.Mesh(ORDER_GEO, new THREE.MeshBasicMaterial({ color, transparent: true }));
+  m.rotation.x = Math.PI;              // 아래를 향하게
+  m.position.set(n.x, n.y + 2.4, n.z);
+  scene.add(m);
+  orderMarkers.set(n.obj, m);
+}
+function clearOrdered(n: (typeof propNodes)[number] | undefined) {
+  if (!n) return;
+  const m = orderMarkers.get(n.obj);
+  if (m) { scene.remove(m); orderMarkers.delete(n.obj); }
+}
+function tickOrderMarkers(dt: number, t: number) {
+  for (const [node, m] of orderMarkers) {
+    m.position.y += 0;                       // 위치는 노드에 고정
+    const k = 1 + Math.sin(t * 7) * 0.16;
+    m.scale.set(k, k, k);
+    m.rotation.y += dt * 3.4;
+  }
+}
+
+function orderHarvest(n: (typeof propNodes)[number]) {
+  if (tasks.some((t) => t.node === n)) return;
+  tasks.push({ id: ++taskSeq, type: 'harvest', node: n, x: n.x, z: n.z });
+  n.obj.userData.ordered = 1;
+  markOrdered(n);
+  status.textContent = '채집 지시!';
+}
+
+/** 크루조 AI: 대기 → 이동 → 작업 → 완료 */
+function npcTick(dt: number) {
+  const h = (window as unknown as { __hero?: { hero: THREE.Object3D } }).__hero?.hero;
+  if (!h) return;
+  if (!npc.task) {
+    const t = nearestIdleTask();
+    if (t) { npc.task = t; npc.state = 'walk'; npc.timer = 0; }
+    else { npc.state = 'idle'; if (current === 'Walk') play('Idle'); return; }
+  }
+  const t = npc.task!;
+  const tx = t.node ? t.node.x : t.x, tz = t.node ? t.node.z : t.z;
+  const dx = tx - h.position.x, dz = tz - h.position.z;
+  const d = Math.hypot(dx, dz);
+  if (npc.state === 'walk') {
+    if (d < 1.35) {
+      npc.state = 'work';
+      npc.timer = t.type === 'build' ? 2.4 : 1.5;
+      play('Attack', false);
+      status.textContent = t.type === 'build' ? '짓는 중…' : '채집 중…';
+    } else {
+      const sp = 3.4 * dt;
+      if (tryStep(dx / d, dz / d, sp)) {
+        const ang = Math.atan2(dx / d, dz / d) * (180 / Math.PI);
+        h.rotation.y += (((ang + 180) - h.rotation.y + 540) % 360) - 180;
+        if (current !== 'Walk') play('Walk');
+      } else {
+        // 갇힘 — 목표 쪽 한 칸을 옆으로 비켜본다
+        tryStep(Math.cos(ang45(dx, dz)), Math.sin(ang45(dx, dz)), sp);
+        tryStep(-Math.cos(ang45(dx, dz)), -Math.sin(ang45(dx, dz)), sp);
+      }
+    }
+  } else if (npc.state === 'work') {
+    const ang = Math.atan2(dx, dz) * (180 / Math.PI);
+    h.rotation.y += (((ang + 180) - h.rotation.y + 540) % 360) - 180;
+    npc.timer -= dt;
+    if (npc.timer <= 0) finishTask(t);
+  }
+}
+const ang45 = (dx: number, dz: number) => Math.atan2(dx, dz) + Math.PI / 2;
+
+function finishTask(t: Task) {
+  const h = (window as unknown as { __hero?: { hero: THREE.Object3D } }).__hero?.hero;
+  clearOrdered(t.node);
+  if (t.type === 'harvest' && t.node) {
+    const list = YIELD[t.node.kind] ?? ['wood'];
+    for (const k of list) inv[k] += 1;
+    harvested += 1;
+    t.node.obj.userData.dying = 0.001;
+    status.textContent = `채집! (+${list.map((k) => ITEM[k].icon).join('')})`;
+  } else if (t.type === 'build' && t.def) {
+    const chk = buildCheck(t.x, t.z, t.def.size);
+    if (chk.ok && canAfford(t.def.cost)) {
+      const tpl = propTemplates.get(t.def.kind);
+      if (tpl) {
+        pay(t.def.cost);
+        const inst = tpl.clone(true);
+        inst.position.set(t.x, chk.y, t.z);
+        inst.visible = true;
+        scene.add(inst);
+        built.push({ kind: t.def.kind, x: t.x, z: t.z, obj: inst });
+        status.textContent = `${t.def.name} 완성!`;
+      }
+    } else {
+      status.textContent = `건설 실패 — ${chk.ok ? '재료 부족' : chk.why}`;
+    }
+  }
+  paintHUD();
+  saveGame();
+  npc.task = null;
+  npc.state = 'idle';
+  void h;
+}
+
+/** 지우개: 건설된 건물 회수 (50% 반환) */
+function demolishAt(wx: number, wz: number) {
+  for (let i = built.length - 1; i >= 0; i--) {
+    const b = built[i];
+    if (Math.abs(b.x - wx) < 1.2 && Math.abs(b.z - wz) < 1.2) {
+      const def = BUILDS.find((x) => x.kind === b.kind);
+      if (def) for (const k of Object.keys(def.cost) as ItemKey[]) inv[k] += Math.floor((def.cost[k] ?? 0) * 0.5);
+      scene.remove(b.obj);
+      built.splice(i, 1);
+      saveGame(); paintHUD();
+      status.textContent = '철거 (재료 50%)';
+      return true;
+    }
+  }
+  return false;
+}
+
+/** 클릭: 노드면 채집 지시 / 건물이면 철거 / 빈 땅이면(건설모드) 건설 지시 */
+renderer.domElement.addEventListener('click', (ev) => {
+  if (!hero) return;
+  const rc = new THREE.Raycaster();
+  const r = renderer.domElement.getBoundingClientRect();
+  const mx = (ev.clientX - r.left) / r.width * 2 - 1;
+  const my = -((ev.clientY - r.top) / r.height) * 2 + 1;
+  rc.setFromCamera(new THREE.Vector2(mx, my), camera);
+  const p = pointerToWorld(ev);
+  // 바닥 좌표는 그대로 쓴다 — 타일 인덱스는 buildCheck/groundAt 내부에서 floor 처리
+  const wx = p ? p[0] : 0, wz = p ? p[1] : 0;
+
+  // 0) 건설 모드면 "지을 수 있는 빈땅" 이 최우선 — 나무가 클릭을 가로채지 못하게
+  if (buildIdx >= 0) {
+    const def = BUILDS[buildIdx];
+    const chk = p ? buildCheck(wx, wz, def.size) : { ok: false, y: 0, why: '맵 밖' };
+    if (chk.ok) {
+      if (!canAfford(def.cost)) { status.textContent = '재료 부족'; return; }
+      tasks.push({ id: ++taskSeq, type: 'build', x: wx, z: wz, kind: def.kind, def });
+      status.textContent = `${def.name} 지시! (크루조가 이동합니다)`;
+      paintHUD();
+      return;
+    }
+    orderReason = chk.why;                 // 클릭이 실패하면 노드 → 철거 순으로 더 시도
+  }
+
+  // 1) 직접 레이캐스트 — 클릭이 정확히 meshes 를 때릴 때
+  let hitNode: (typeof propNodes)[number] | null = null;
+  for (const n of propNodes) {
+    if (!n.obj.visible) continue;
+    if (rc.intersectObject(n.obj, true).length) { hitNode = n; break; }
+  }
+  // 2) 폴백 — 얇은 나뭇잎은 빗나가기 쉽다. 커서 바로 아래 노드를 찾는다
+  if (!hitNode) {
+    let bestPx = 34 * 34;
+    const v = new THREE.Vector3();
+    for (const n of propNodes) {
+      if (!n.obj.visible) continue;
+      v.set(n.x, n.y + 0.7, n.z).project(camera);
+      if (v.z > 1) continue;                                   // 카메라 뒤
+      const px = (v.x * 0.5 + 0.5) * r.width - (ev.clientX - r.left);
+      const py = (-v.y * 0.5 + 0.5) * r.height - (ev.clientY - r.top);
+      const d2 = px * px + py * py;
+      if (d2 < bestPx) { bestPx = d2; hitNode = n; }
+    }
+  }
+  if (hitNode) { orderHarvest(hitNode); return; }
+
+  // 3) 빈 땅 → 건설 지시 / 건물 → 철거
+  if (!p) return;
+  if (demolishAt(wx, wz)) return;
+  if (buildIdx >= 0) {
+    status.textContent = `여기론 못 지음 — ${orderReason || '안 됨'}`;
+  }
+});
+let orderReason = '';
+
 // ---------- 건설 (BUILD) ----------
 interface BuildDef {
-  kind: string; name: string; cost: Partial<Record<ItemKey, number>>; size: number;
+  kind: string; name: string; icon: string; cost: Partial<Record<ItemKey, number>>; size: number;
 }
 const BUILDS: BuildDef[] = [
-  { kind: 'b_campfire', name: '모닥불', cost: { wood: 4, stone: 2 }, size: 1 },
-  { kind: 'b_hut', name: '오두막', cost: { wood: 12, stone: 4 }, size: 2 },
-  { kind: 'b_storage', name: '창고', cost: { wood: 16, stone: 6 }, size: 2 },
-  { kind: 'b_wall', name: '울타리', cost: { wood: 6, stone: 2 }, size: 1 },
-  { kind: 'b_tower', name: '감시탑', cost: { wood: 20, stone: 14 }, size: 2 },
+  { kind: 'b_campfire', name: '모닥불', icon: '🔥', cost: { wood: 4, stone: 2 }, size: 1 },
+  { kind: 'b_hut', name: '오두막', icon: '🛖', cost: { wood: 12, stone: 4 }, size: 2 },
+  { kind: 'b_storage', name: '창고', icon: '📦', cost: { wood: 16, stone: 6 }, size: 2 },
+  { kind: 'b_wall', name: '울타리', icon: '🧱', cost: { wood: 6, stone: 2 }, size: 1 },
+  { kind: 'b_tower', name: '감시탑', icon: '🗼', cost: { wood: 20, stone: 14 }, size: 2 },
 ];
 let buildIdx = -1;                       // -1 = 건설 모드 아님
 const ghost = new THREE.Mesh(
@@ -537,37 +757,31 @@ function buildCheck(wx: number, wz: number, size: number): { ok: boolean; y: num
   return { ok: true, y: g, why: '' };
 }
 
-function enterBuildMode() {
-  buildIdx = (buildIdx + 1) % BUILDS.length;
-  const b = BUILDS[buildIdx];
-  status.textContent = `건설: ${b.name} (${Object.entries(b.cost).map(([k, v]) => ITEM[k as ItemKey].icon + v).join('')})`
-    + ` · 클릭/Enter로 짓기 · B 취소`;
+/** 건설 메뉴 DOM (아이콘만 — 무텍스트 규칙) */
+const BMENU = document.getElementById('bmenu') as HTMLDivElement;
+function paintBuildMenu() {
+  if (!BMENU) return;
+  BMENU.innerHTML = BUILDS.map((b, i) => {
+    const on = i === buildIdx;
+    const afford = canAfford(b.cost);
+    const cost = Object.entries(b.cost).map(([k, v]) => ITEM[k as ItemKey].icon + v).join('');
+    return `<button class="bi${on ? ' on' : ''}${afford ? '' : ' poor'}" data-i="${i}">
+      <span class="ic">${b.icon}</span><span class="cst">${cost}</span></button>`;
+  }).join('');
+}
+BMENU?.addEventListener('click', (e) => {
+  const btn = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
+  if (!btn) return;
+  const i = Number(btn.dataset.i);
+  buildIdx = buildIdx === i ? -1 : i;        // 다시 누르면 취소
+  paintBuildMenu();
   ghost.visible = false;
-}
-function exitBuildMode() { buildIdx = -1; ghost.visible = false; }
-
-function placeBuilding() {
-  if (buildIdx < 0 || !hero) return;
-  const b = BUILDS[buildIdx];
-  const wx = Math.round(hero.position.x), wz = Math.round(hero.position.z);
-  const chk = buildCheck(wx, wz, b.size);
-  if (!chk.ok) { status.textContent = `여기론 못 지음 — ${chk.why}`; return; }
-  if (!canAfford(b.cost)) {
-    status.textContent = `재료 부족 (${Object.entries(b.cost).map(([k, v]) => ITEM[k as ItemKey].icon + v).join('')})`;
-    return;
-  }
-  const tpl = propTemplates.get(b.kind);
-  if (!tpl) { status.textContent = '모델 없음: ' + b.kind; return; }
-  pay(b.cost);
-  const inst = tpl.clone(true);
-  inst.position.set(wx, chk.y, wz);
-  inst.visible = true;
-  scene.add(inst);
-  built.push({ kind: b.kind, x: wx, z: wz, obj: inst });
-  saveGame();
-  paintHUD();
-  status.textContent = `${b.name} 완성!`;
-}
+  status.textContent = buildIdx < 0
+    ? '건설 모드 해제'
+    : `${BUILDS[i].name} 선택 — 맵을 눌러 건설 지시`;
+});
+function exitBuildMode() { buildIdx = -1; ghost.visible = false; paintBuildMenu(); }
+paintBuildMenu();
 
 /** Pointer = 지도 위 위치 계산 (건설 모드 미리보기) */
 function pointerToWorld(ev: PointerEvent): [number, number] | null {
@@ -586,16 +800,16 @@ renderer.domElement.addEventListener('pointermove', (ev) => {
   const p = pointerToWorld(ev);
   if (!p) { ghost.visible = false; return; }
   const b = BUILDS[buildIdx];
-  const wx = Math.round(p[0]), wz = Math.round(p[1]);
-  const chk = buildCheck(wx, wz, b.size);
-  const y = groundAt(wx + 0.5, wz + 0.5);
+  const tx = Math.floor(p[0]) + 0.5, tz = Math.floor(p[1]) + 0.5;
+  const chk = buildCheck(tx, tz, b.size);
+  const y = groundAt(tx, tz);
   ghost.visible = y !== null;
-  ghost.position.set(wx + 0.5, (y ?? 0) + 0.06, wz + 0.5);
+  ghost.position.set(tx, (y ?? 0) + 0.06, tz);
   ghost.scale.set(b.size, 1, b.size);
   (ghost.material as THREE.MeshBasicMaterial).color.setHex(chk.ok ? 0x7CFC9A : 0xFF5A5A);
   status.textContent = `건설: ${b.name} · ${chk.ok ? '가능' : chk.why}`;
 });
-renderer.domElement.addEventListener('click', () => { if (buildIdx >= 0) placeBuilding(); });
+// 건설 확정도 click 핸들러(명령 큐)가 담당 — 여기서는 미리보기만
 
 // ---------- 지형 위에서 걷기 (레이캐스트로 높이 샘플) ----------
 const ray = new THREE.Raycaster();
@@ -678,7 +892,7 @@ function placeAtSpawn() {
     // 시점은 맵 고정(CoC 방식) — 크루조가 움직여도 카메라 안 따라간다
     const m = RULES.mesas[0];
     status.textContent = `도착 · ${RULES.terrain ?? ''}${RULES.hasRiver ? ' · 강' : ''}`
-      + `${m ? ` · 산 ${m.R}타일` : ''} · WASD 이동 / 휠=줌 / V 시점 / 1-4 동작`;
+      + `${m ? ` · 산 ${m.R}타일` : ''} · 노드 클릭=채집 / 하단 메뉴=건설 / 휠=줌 / 드래그=이동`;
   }
 }
 
@@ -706,41 +920,7 @@ function stepHero(dt: number) {
     if (y !== null) { hero.position.y = y; grounded = true; cocify([hero], 0.013); }
     return;
   }
-  let dx = 0, dz = 0;
-  for (const k of held) { const m = MOVE[k]; if (m) { dx += m[0]; dz += m[1]; } }
-  if (dx || dz) {
-    const len = Math.hypot(dx, dz);
-    const sp = 4.2 * dt;
-    const tryMove = (nx: number, nz: number): boolean => {
-      const g = groundAt(nx, nz);
-      if (g === null) return false;
-      if (RULES && !walkable(Math.floor(nx), Math.floor(nz))) return false;  // 절벽·물 불가
-      const cur = hero.position.y;
-      const dist = Math.hypot(nx - hero.position.x, nz - hero.position.z);
-      if (dist > 1e-4) {
-        const grad = Math.abs(cur - g) / dist;
-        if (grad > 0.62) return false;                      // 급경사(계간/절벽)는 못 감
-      }
-      hero.position.set(nx, g, nz);
-      return true;
-    };
-    // 서브스텝: 경계에 부딪히면 그립을 따라 미끄러진다
-    const SUB = 4;
-    let moved = false;
-    for (let s = 0; s < SUB; s++) {
-      const ax = (dx / len) * (sp / SUB), az = (dz / len) * (sp / SUB);
-      if (tryMove(hero.position.x + ax, hero.position.z + az)) { moved = true; continue; }
-      if (tryMove(hero.position.x + ax, hero.position.z)) { moved = true; continue; }
-      if (tryMove(hero.position.x, hero.position.z + az)) { moved = true; continue; }
-      break;
-    }
-    if (!moved) { /* 막힘 */ }
-    const ang = Math.atan2(dx / len, dz / len) * (180 / Math.PI);
-    hero.rotation.y += (((ang + 180) - hero.rotation.y + 540) % 360) - 180;
-    if (current !== 'Walk') play('Walk');
-  } else if (current === 'Walk') {
-    play('Idle');
-  }
+  // 18-17: 크루조는 직접 조종하지 않는다. 명령(task)만 따른다 → npcTick()
 }
 
 // ---------- 루프 ----------
@@ -751,23 +931,21 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
+// 18-17: 키보드 조작 없음 — 클릭(지시) · 휠(줌) · 드래그(이동) 만 쓴다
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'KeyE' || e.code === 'Space') { e.preventDefault(); doHarvest(); return; }
-  if (e.code === 'KeyB') { e.preventDefault(); enterBuildMode(); return; }
-  if (e.code === 'Enter') { e.preventDefault(); placeBuilding(); return; }
-  if (e.code === 'Escape') { exitBuildMode(); return; }
-  const n = KEYS[e.key];
-  if (n) { play(n, n !== 'Attack' && n !== 'Hit'); return; }
-  if (MOVE[e.code]) held.add(e.code);
+  if (e.code === 'Escape') exitBuildMode();
 });
-window.addEventListener('keyup', (e) => held.delete(e.code));
 
 let prev = performance.now();
+let clock = 0;
 
 /** 한 프레임 진행 — RAF 없이도手动으로 돌릴 수 있게 노출(테스트/백그라운드 탭용) */
 export function tick(dt = 1 / 60) {
+  clock += dt;
   stepHero(dt);
+  npcTick(dt);
   updateHarvest(dt);
+  tickOrderMarkers(dt, clock);
   if (camTween) {
     camTween.t = Math.min(1, camTween.t + dt * 2.2);
     const e = 1 - Math.pow(1 - camTween.t, 3);
@@ -788,4 +966,8 @@ renderer.setAnimationLoop((t) => {
 });
 
 // 디버그 훅
-(window as unknown as { __three?: unknown }).__three = { scene, camera, renderer, controls, groundMeshes, groundAt, isGrounded: () => grounded, tick };
+(window as unknown as { __three?: unknown }).__three = {
+  scene, camera, renderer, controls, groundMeshes, groundAt, isGrounded: () => grounded, tick,
+  THREE, get RULES() { return RULES; }, get hero() { return hero; }, propNodes, built, tasks,
+  orderHarvest, buildCheck, BUILDS, respawnQ, get buildIdx() { return buildIdx; },
+};
