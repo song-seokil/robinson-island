@@ -16,7 +16,9 @@
     "ios:sync": "npm run build && cap sync ios"
   },
   "dependencies": {
-    "phaser": "^3.80.0"
+    "@types/three": "^0.186.0",
+    "phaser": "^3.80.0",
+    "three": "^0.186.1"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

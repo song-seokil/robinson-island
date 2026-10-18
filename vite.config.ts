@@ -15,5 +15,11 @@ export default defineConfig({
   build: {
     target: 'es2020',
     chunkSizeWarningLimit: 2000,
+    rollupOptions: {
+      input: {
+        main: 'index.html',
+        island3d: 'index3d.html',
+      },
+    },
   },
 });

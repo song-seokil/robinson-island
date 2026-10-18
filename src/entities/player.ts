@@ -1,11 +1,12 @@
 import Phaser from 'phaser';
 import { Combatant, WorldCtx } from './combatant';
-import { PLAYER_HP, PLAYER_SPEED, ItemKey, requiredTier, TIER_NAMES } from '../core/config';
+import { PLAYER_HP, PLAYER_SPEED, PLAYER_SKINS, ItemKey, requiredTier, TIER_NAMES } from '../core/config';
 import { addItem, familyTier, hasTool } from '../core/state';
 import { ResourceNode } from '../world/node';
 import { slash, floatText, dust, burst } from '../fx/fx';
 import { play } from '../core/sfx';
 import { itemIcon } from '../core/i18n';
+import { bus, EV } from '../core/bus';
 
 /**
  * 로빈슨 크루소 본인.
@@ -36,6 +37,29 @@ export class Player extends Combatant {
       this.weaponImg.setTexture('w_spear').setVisible(true).setPosition(12, -20).setAngle(12);
     } else {
       this.weaponImg.setVisible(false);
+    }
+  }
+
+  /**
+   * 생존자 진화 — 도구 단계(1~5)에 따라 외형이 표류 → 개척 → 수정 → 동력 → 지배자로 바뀐다.
+   * (u_player1~5.png 가 없으면 u_player 로 폴백)
+   */
+  syncSkin(announce = false) {
+    const tier = Math.max(1, Math.min(5, Math.max(familyTier('wood'), familyTier('stone'), familyTier('oil'))));
+    const skin = PLAYER_SKINS[tier - 1];
+    const tex = this.ctx.scene.textures.exists(skin.tex) ? skin.tex : 'u_player';
+    if (this.art.texture.key === tex) return;
+    const first = this.art.texture.key !== 'u_player' && !this.art.texture.key.startsWith('u_player');
+    this.art.setTexture(tex);
+    this.art.setScale(this.art.scaleX, this.art.scaleY);   // 새 텍스처 크기에 맞춰 스케일 유지
+    if (announce && !first) {
+      const sc = this.ctx.scene;
+      sc.tweens.add({ targets: this.art, scaleX: this.art.scaleX * 1.35, scaleY: this.art.scaleY * 1.35, yoyo: true, duration: 260 });
+      burst(sc, this.x, this.y - 20, 'fx_spark', 26, {
+        speed: { min: 60, max: 220 }, lifespan: { min: 300, max: 700 },
+        scale: { start: 1.3, end: 0 }, tint: [0xffd060, 0xffffff],
+      });
+      bus.emit(EV.BANNER, { title: `${skin.stage}의 생존자`, sub: skin.desc, icon: '✨' });
     }
   }
 

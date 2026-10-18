@@ -118,10 +118,27 @@ def load_texture(name):
 # 1. 데이터 로드 + 높이/색 필드 계산
 # ============================================================
 meta = json.load(open(os.path.join(DATA, 'meta.json'), encoding='utf-8'))
+SRC = int(meta['res'])
 if GRID <= 0:
-    GRID = int(meta['res'])
-S = np.fromfile(os.path.join(DATA, 'shape.f32'), dtype=np.float32).reshape(GRID, GRID).astype(np.float64)
-M = np.fromfile(os.path.join(DATA, 'moist.f32'), dtype=np.float32).reshape(GRID, GRID).astype(np.float64)
+    GRID = SRC
+
+
+def load_field(fname):
+    # load a field at export res (SRC) then resample to GRID
+    src = np.fromfile(os.path.join(DATA, fname), dtype=np.float32).reshape(SRC, SRC).astype(np.float64)
+    if GRID == SRC:
+        return src
+    idx = np.linspace(0.0, SRC - 1.0, GRID)
+    i0 = np.clip(np.floor(idx).astype(int), 0, SRC - 2)
+    f = (idx - i0)[None, :]
+    rows = src[i0]                                   # (GRID, SRC)
+    j0 = i0
+    j1 = np.clip(i0 + 1, 0, SRC - 1)
+    return rows[:, j0] * (1.0 - f) + rows[:, j1] * f
+
+
+S = load_field('shape.f32')
+M = load_field('moist.f32')
 
 # --- 필드를 한 번 다듬는다 (해안선·능선을 매끄럽게 → 만화풍) ---
 S = blur(S, 2)
@@ -237,7 +254,7 @@ sand_t = smoothstep(0.402, 0.44, S) * (1 - smoothstep(0.48, 0.51, S))
 
 
 def tint(mask2d, color):
-    """2D 마스크로 색을 조금 얹는다"""
+    # blend a 2D mask over the color
     return np.clip(mask2d, 0.0, 1.0)[..., None] * np.array(color, dtype=np.float64)
 
 
@@ -450,7 +467,46 @@ if FREESTYLE:
     ls.linestyle.thickness = 1.1
 
 # ---------------------------------------------------------------
-# 3. 렌더
+# 3. GLB 내보내기 (Three.js 3D 버전용 — 실제 3D 메시)
+# ---------------------------------------------------------------
+GLB = os.environ.get('B3D_GLB', '')
+if GLB:
+    # glTF 는 Toon 을 모른다 → Principled 로 바꾸고(정점색 그대로) 내보낸다
+    def to_principled(mat, rough=0.92):
+        nt = mat.node_tree
+        for n in list(nt.nodes):
+            if n.type == 'BSDF_TOON':
+                bsdf = nt.nodes.new('ShaderNodeBsdfPrincipled')
+                bsdf.location = n.location
+                bsdf.inputs['Roughness'].default_value = rough
+                for l in list(nt.links):
+                    if l.to_node == n:
+                        nt.links.remove(l)
+                col_node = nt.nodes.new('ShaderNodeVertexColor')
+                col_node.layer_name = 'Col'
+                col_node.location = (col_node.location.x - 300, col_node.location.y)
+                nt.links.new(col_node.outputs['Color'], bsdf.inputs['Base Color'])
+                nt.links.new(bsdf.outputs['BSDF'], n.inputs[0])
+    to_principled(gmat, 0.95)
+    if water.data.materials:
+        wm = water.data.materials[0]
+        wnt = wm.node_tree
+        for n in list(wnt.nodes):
+            if n.type == 'BSDF_PRINCIPLED':
+                n.inputs['Roughness'].default_value = 0.25
+    os.makedirs(os.path.dirname(GLB), exist_ok=True)
+    bpy.ops.object.select_all(action='SELECT')
+    bpy.ops.export_scene.gltf(filepath=GLB, export_format='GLB',
+                            export_apply=False, export_yup=True,
+                            export_texcoords=False, export_animations=False,
+                            export_draco_mesh_compression_enable=True,
+                            export_draco_mesh_compression_level=6,
+                            export_materials='EXPORT')
+    print('[b3d] glb saved: %s' % GLB)
+    raise SystemExit(0)
+
+# ---------------------------------------------------------------
+# 4. 렌더
 # ---------------------------------------------------------------
 out_path = os.path.join(OUT, 'island_%d.png' % SEED)
 scene.render.filepath = out_path

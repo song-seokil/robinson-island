@@ -153,6 +153,15 @@ export function requiredTier(level: number, family: Family): number {
 /** 레벨별 필요 도구 단계(1~5)를 사람이 읽는 이름으로 */
 export const TIER_NAMES = ['맨손', '돌 도구', '수정 도구', '동력 도구', '결정 동력 도구'];
 
+/** 생존자 외형 — 도구 단계(1~5)에 따라 달라진다. 표류 → 개척 → 지배자 */
+export const PLAYER_SKINS = [
+  { tex: 'u_player1', stage: '표류', desc: '해변에 쓰러져 있던 것을 깨어난 사람' },
+  { tex: 'u_player2', stage: '개척', desc: '돌 창과 천 옷, 첫 번째 캠프' },
+  { tex: 'u_player3', stage: '수정', desc: '수정 장신과 가죽 갑옷' },
+  { tex: 'u_player4', stage: '동력', desc: '금속 어깨갑옷과 튼튼한 창' },
+  { tex: 'u_player5', stage: '지배자', desc: '완성된 갑옷, 섬을 다스리는 사람' },
+] as const;
+
 /** 레벨별 체력(스윙 수) — 상위 도구는 한 방 피해가 커서 더 빨리 캔다 */
 export function nodeHp(level: number): number {
   return 2 + level;

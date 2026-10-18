@@ -45,6 +45,8 @@ export interface IslandData {
   trait: IslandTrait;
   terrain: IslandTerrain;
   hasRiver: boolean;      // 섬을 가르는 물길이 있는가 (여울로만 건넌다)
+  /** 사용자가 폭파/평탄화해 넓힌 통로: 타일 인덱스 → 통행 폭 등급(PASS) */
+  gates: Record<number, number>;
   counts: Record<string, number>;      // 종류별 노드 개수
 }
 
@@ -54,7 +56,20 @@ export const TERRAIN = {
   MAX_ELEV: 2.0,   // 고도 상한(타일) — 난공불락 방지
   STEP_MAX: 0.5,   // 이동 가능 경사 (타일/타일, ≈27°) — 넘으면 못 감
   FLAT_MAX: 0.16,  // 건설 가능 경사 (≈9°) — 건물을 세울 만큼 평평해야 함
+  ROAD_MAX: 0.34,  // 큰 장난감이 오를 수 있는 경사 (≈19°) — 이 아래는 '길', 위는 '비탈'
+  FORD_ELEV: -0.12, // 여울(얕은 물) 기준 고도 — 이 위면 물길이지만 건널 수 있다
 };
+
+/**
+ * 통행 규격 — 장난감의 크기. 좁은 입구를 큰 장난감은 못 통과한다.
+ * (산·강이 자연 벽이면서 "성"이 되는 이유 = 벽 안이 좁고, 넓은 물자리는 밖에 있다)
+ */
+export const PASS = {
+  WALK: 0,   // 보행 · 소형 병정 — 계간/여울/좁은 입구 통과 가능
+  CART: 1,   // 수레 · 중형 — 완만한 길과 넓은 여울만
+  RIG: 2,    // 대형 수확기 · 물자 운반 — 넓고 평평한 길만 (경사 ≤ ROAD_MAX)
+} as const;
+export type PassSize = (typeof PASS)[keyof typeof PASS];
 
 export function generateIsland(seed: number): IslandData {
   const rng = new RNG(seed ^ 0x9e3779b9);
@@ -548,6 +563,7 @@ if (rng.next() < 0.55) {
     trait,
     terrain,
     hasRiver,
+    gates: {},
     counts,
   };
 }
@@ -606,6 +622,46 @@ export function isFlatSpot(d: IslandData, tx: number, ty: number, sx: number, sy
     }
   }
   return true;
+}
+
+/**
+ * 그 길이 통과할 수 있는 최대 장난감 규격. −1 = 통과 불가(= 자연 벽)
+ *  · 절벽(steep) · 깊은 물 → 완전한 벽
+ *  · 여울(얕은 물길) · 계간(계단) → 보행만
+ *  · 완만한 길(≤ROAD_MAX) → 수레까지 / 평지 → 대형까지
+ *  · 사용자가 폭파·평탄화한 통로(gates)는 자연 등급보다 넓어진다
+ */
+export function passWidthAt(d: IslandData, tx: number, ty: number): number {
+  if (tx < 0 || ty < 0 || tx >= d.w || ty >= d.h) return -1;
+  const i = ty * d.w + tx;
+  const h = d.elev[i];
+  let w: number;
+  if (d.steep[i]) w = -1;                                  // 절벽 = 자연 벽
+  else if (h < TERRAIN.FORD_ELEV) w = -1;                 // 깊은 강·바다 = 자연 벽
+  else if (h < 0) w = PASS.WALK;                          // 여울 — 얕은 물길(보행만)
+  else if (d.ramp[i]) w = PASS.WALK;                      // 계간 = 계단 → 보행만
+  else {
+    const s = slopeAt(d, tx, ty);
+    w = s <= TERRAIN.FLAT_MAX ? PASS.RIG : s <= TERRAIN.ROAD_MAX ? PASS.CART : PASS.WALK;
+  }
+  const opened = d.gates[i];                              // 사용자가 넓힌 입구
+  if (opened !== undefined && opened > w) w = Math.min(PASS.RIG, opened);
+  return w;
+}
+
+/** 입구를 넓힌다(폭파 · 계단 깎기 · 평탄화). level = 만들 규격. 넓힐수록 벽이 약해진다 */
+export function widenGate(d: IslandData, tx: number, ty: number, level: PassSize): boolean {
+  const cur = passWidthAt(d, tx, ty);
+  if (cur === -1 || cur >= level) return false;            // 벽을 뚫을 수 없거나 이미 넓음
+  d.gates[ty * d.w + tx] = level;
+  if (level >= PASS.CART) d.steep[ty * d.w + tx] = 0;      // 절벽을 깎으면 통로가 열린다
+  if (level >= PASS.RIG) d.ramp[ty * d.w + tx] = 0;        // 계간을 평탄화하면 차가 오른다
+  return true;
+}
+
+/** 월드 좌표에서 해당 규격이 지나갈 수 있는가 (길찾기·대형 장난감 AI용) */
+export function passAt(d: IslandData, wx: number, wy: number, size: PassSize): boolean {
+  return passWidthAt(d, Math.floor(wx / TILE), Math.floor(wy / TILE)) >= size;
 }
 
 /** 고지대 사거리 보정 — 1타일당 +10%, 최대 +25% (방어가 유리해지되 무한정은 아님) */

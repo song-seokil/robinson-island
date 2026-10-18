@@ -196,6 +196,7 @@ export class IslandScene extends Phaser.Scene {
     this.all.push(this.player);
     this.player.hp = state.hp > 0 ? state.hp : 100;
     this.playerDead = false;
+    this.player.syncSkin(false);
     if (this.worldLayer) this.addWorld(this.player);
   }
 
@@ -738,6 +739,7 @@ export class IslandScene extends Phaser.Scene {
       pay(rec.cost);
       giveTool(rec.id);
       this.player.refreshWeapon();
+      this.player.syncSkin(true);
       play('craft');
       this.flashCraft(`${rec.icon} ${rec.name}`);
       this.checkQuests();
