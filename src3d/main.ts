@@ -40,14 +40,15 @@ scene.fog = new THREE.Fog(0x0a1a2a, 90, 240);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 800);
 const CLOSE_UP = new URLSearchParams(location.search).has('stage');
+const CX = WORLD / 2, CZ = WORLD / 2;
 if (CLOSE_UP) {
-  camera.position.set(WORLD / 2 - 5.5, 4.2, WORLD / 2 + 7.5);   // 생존자 클로즈업
+  camera.position.set(CX - 5.5, 4.2, CZ + 7.5);   // 생존자 클로즈업
 } else {
-  camera.position.set(WORLD / 2 - 34, 46, WORLD / 2 + 62);
+  camera.position.set(CX - 34, 46, CZ + 62);
 }
 
 const controls = new OrbitControls(camera, canvas);
-controls.target.set(WORLD / 2, CLOSE_UP ? 1.0 : 0, WORLD / 2);
+controls.target.set(CX, CLOSE_UP ? 1.0 : 0, CZ);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.minDistance = 2.5;
@@ -87,6 +88,7 @@ gltf.setDRACOLoader(draco);
 
 const params = new URLSearchParams(location.search);
 const seed = params.get('seed') ?? '824934';
+let worldSpan = { x: WORLD, z: WORLD };
 
 gltf.load(`/glb/island_${seed}.glb`, (g) => {
   const root = g.scene;
@@ -99,20 +101,99 @@ gltf.load(`/glb/island_${seed}.glb`, (g) => {
     });
     o.castShadow = false;
     o.receiveShadow = true;
+    if ((o as THREE.Mesh).isMesh) groundMeshes.push(o as THREE.Mesh);
   });
   scene.add(root);
+  // 좌표 규약 맞춤: 지형의 최소 모서리를 (0,0,0) 으로 옮긴다 (바다면 = y 0)
+  // (Blender Z-up → glTF Y-up 변환 때문에 섬이 z<0 에 놓여 있다)
+  const bb = new THREE.Box3().setFromObject(root);
+  root.position.x -= bb.min.x;
+  root.position.z -= bb.min.z;
+  root.position.y -= bb.min.y;
+  root.updateMatrixWorld(true);
+  const bb2 = new THREE.Box3().setFromObject(root);
+  worldSpan = { x: bb2.max.x - bb2.min.x, z: bb2.max.z - bb2.min.z };
   status.textContent = `로빈슨의 섬 · 3D · 시드 ${seed} · ${WORLD}×${WORLD}타일`;
   (window as unknown as { __island?: THREE.Object3D }).__island = root;
 }, undefined, (err) => {
   status.textContent = `섬 로드 실패: ${err}`;
 });
 
-// ---------- 생존자 (Blender 리그 + 4종 클립) ----------
+// ---------- CoC 룩: 3단 툰 음영 + 두꺼운 외곽선 ----------
+/** 툰 셰이딩 그라디언트 (4톤) — CoC 처럼 평평한 색면으로 */
+function toonGradient(): THREE.DataTexture {
+  const steps = new Uint8Array([86, 148, 205, 255]);
+  const tex = new THREE.DataTexture(steps, steps.length, 1, THREE.RedFormat);
+  tex.minFilter = tex.magFilter = THREE.NearestFilter;
+  tex.needsUpdate = true;
+  return tex;
+}
+const GRAD = toonGradient();
+
+/** 역방향 껍질(inverted hull) 외곽선 — 시그니처적인 두꺼운 윤곽선 */
+const OUTLINE = new THREE.ShaderMaterial({
+  side: THREE.BackSide,
+  uniforms: { thick: { value: 0.016 }, ink: { value: new THREE.Color(0x2a1c11) } },
+  vertexShader: `
+    uniform float thick;
+    void main() {
+      vec3 p = position + normal * thick;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+    }`,
+  fragmentShader: `
+    uniform vec3 ink;
+    void main() { gl_FragColor = vec4(ink, 1.0); }`,
+});
+
+/** 메시에 툰재질 + 외곽선 추가 */
+function cocify(roots: THREE.Object3D[], ink = 0.016) {
+  for (const root of roots) {
+    const todo: THREE.Mesh[] = [];
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) todo.push(o as THREE.Mesh); });
+    for (const mesh of todo) {
+      const geo = mesh.geometry;
+      // 툰 재질로 교체 (색은 원래 재질에서 유지)
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      const toon = mats.map((m) => {
+        const base = (m as THREE.MeshStandardMaterial).color ?? new THREE.Color(0xcccccc);
+        return new THREE.MeshToonMaterial({ color: base, gradientMap: GRAD });
+      });
+      mesh.material = Array.isArray(mesh.material) ? toon : toon[0];
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+
+      // 외곽선 복제본
+      const om = OUTLINE.clone();
+      om.uniforms = THREE.UniformsUtils.clone(OUTLINE.uniforms);
+      om.uniforms.thick.value = ink;
+      const line = new THREE.Mesh(geo, om);
+      line.castShadow = false;
+      line.receiveShadow = false;
+      line.frustumCulled = mesh.frustumCulled;
+      const sk = (mesh as THREE.SkinnedMesh).isSkinnedMesh ? (mesh as THREE.SkinnedMesh) : null;
+      if (sk && sk.skeleton) {
+        const sm = new THREE.SkinnedMesh(geo, om);
+        sm.bind(sk.skeleton, sk.bindMatrix);
+        sm.castShadow = false;
+        mesh.add(sm);
+      } else {
+        mesh.add(line);
+      }
+    }
+  }
+}
+
+// ---------- 생존자 (Blender 리그 + 5종 클립) ----------
 const mixer = new AnimationMixer(scene);
 let hero: THREE.Object3D | null = null;
 let clips: THREE.AnimationClip[] = [];
 let current = '';
 const KEYS: Record<string, string> = { '1': 'Idle', '2': 'Walk', '3': 'Attack', '4': 'Hit' };
+const MOVE: Record<string, [number, number]> = {
+  KeyW: [0, -1], KeyS: [0, 1], KeyA: [-1, 0], KeyD: [1, 0],
+  ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
+};
+const held = new Set<string>();
 
 function play(name: string, loop = true) {
   if (!hero) return;
@@ -124,7 +205,7 @@ function play(name: string, loop = true) {
   if (!loop) act.setLoop(THREE.LoopOnce, 1);
   act.clampWhenFinished = !loop;
   current = name;
-  status.textContent = `로빈슨 · ${name}`;
+  status.textContent = `로빈슨 · ${name} · WASD 이동 / 1-4 동작`;
 }
 
 // 생존자 3상태 — 0 난파 / 1 1일차 / 2 적응완료
@@ -132,18 +213,58 @@ const params0 = new URLSearchParams(location.search);
 const startStage = Math.max(0, Math.min(2, Number(params0.get('stage') ?? 2)));
 gltf.load(`/glb/robinson_s${startStage}.glb`, (g) => {
   hero = g.scene;
-  hero.traverse((o) => {
-    const m = (o as THREE.Mesh).material as THREE.Material | undefined;
-    if (m) (Array.isArray(m) ? m : [m]).forEach((mm) => { (mm as THREE.MeshStandardMaterial).flatShading = true; });
-    o.castShadow = true;
-    o.receiveShadow = true;
-  });
-  hero.position.set(WORLD / 2, 0, WORLD / 2);   // 섬 한가운데
+  hero.position.set(WORLD / 2, 0, WORLD / 2);
   scene.add(hero);
+  grounded = false;
   clips = g.animations;
   (window as unknown as { __hero?: unknown }).__hero = { hero, clips, mixer, play };
   play(clips.some((c) => c.name === 'Walk') ? 'Walk' : clips[0]?.name ?? 'Idle');
 }, undefined, (err) => { console.warn('[hero]', err); });
+
+// ---------- 지형 위에서 걷기 (레이캐스트로 높이 샘플) ----------
+const ray = new THREE.Raycaster();
+const down = new THREE.Vector3(0, -1, 0);
+let groundMeshes: THREE.Mesh[] = [];
+let grounded = false;
+
+function groundAt(x: number, z: number): number | null {
+  ray.set(new THREE.Vector3(x, 60, z), down);
+  const hit = ray.intersectObjects(groundMeshes, false)[0];
+  return hit ? hit.point.y : null;
+}
+
+function stepHero(dt: number) {
+  if (!hero) return;
+  if (!grounded) {
+    const y = groundAt(hero.position.x, hero.position.z);
+    if (y !== null) { hero.position.y = y; grounded = true; cocify([hero], 0.013); }
+    return;
+  }
+  let dx = 0, dz = 0;
+  for (const k of held) { const m = MOVE[k]; if (m) { dx += m[0]; dz += m[1]; } }
+  if (dx || dz) {
+    const len = Math.hypot(dx, dz);
+    const sp = 4.2 * dt;
+    let nx = hero.position.x + (dx / len) * sp;
+    let nz = hero.position.z + (dz / len) * sp;
+    nx = Math.max(0.5, Math.min(worldSpan.x - 0.5, nx));
+    nz = Math.max(0.5, Math.min(worldSpan.z - 0.5, nz));
+    const y = groundAt(nx, nz);
+    if (y !== null) { hero.position.x = nx; hero.position.z = nz; hero.position.y = y; }
+    else {
+      // 물/바다 위면 이동하지 않는다
+      const y0 = groundAt(nx, hero.position.z);
+      const z1 = groundAt(hero.position.x, nz);
+      if (y0 !== null) { hero.position.x = nx; hero.position.y = y0; }
+      else if (z1 !== null) { hero.position.z = nz; hero.position.y = z1; }
+    }
+    const ang = Math.atan2(dx / len, dz / len) * (180 / Math.PI);
+    hero.rotation.y += (((ang + 180) - hero.rotation.y + 540) % 360) - 180;
+    if (current !== 'Walk') play('Walk');
+  } else if (current === 'Walk') {
+    play('Idle');
+  }
+}
 
 // ---------- 루프 ----------
 function resize() {
@@ -155,16 +276,33 @@ window.addEventListener('resize', resize);
 
 window.addEventListener('keydown', (e) => {
   const n = KEYS[e.key];
-  if (n) play(n, n !== 'Attack' && n !== 'Hit');
+  if (n) { play(n, n !== 'Attack' && n !== 'Hit'); return; }
+  if (MOVE[e.code]) { held.add(e.code); if (hero) followCam = true; }
 });
+window.addEventListener('keyup', (e) => held.delete(e.code));
 
+let followCam = CLOSE_UP;
 let prev = performance.now();
-renderer.setAnimationLoop((t) => {
-  mixer.update(Math.min(0.05, (t - prev) / 1000));
-  prev = t;
+
+/** 한 프레임 진행 — RAF 없이도手动으로 돌릴 수 있게 노출(테스트/백그라운드 탭용) */
+export function tick(dt = 1 / 60) {
+  stepHero(dt);
+  if (followCam && hero) {
+    controls.target.lerp(new THREE.Vector3(hero.position.x, hero.position.y + 1.0, hero.position.z), 1 - Math.pow(0.001, dt));
+    camera.position.x += (hero.position.x - 8 - camera.position.x) * Math.min(1, dt * 2);
+    camera.position.z += (hero.position.z + 9 - camera.position.z) * Math.min(1, dt * 2);
+    camera.position.y += (hero.position.y + 5.5 - camera.position.y) * Math.min(1, dt * 2);
+  }
+  mixer.update(dt);
   controls.update();
   renderer.render(scene, camera);
+}
+
+renderer.setAnimationLoop((t) => {
+  const dt = Math.min(0.05, (t - prev) / 1000);
+  prev = t;
+  tick(dt);
 });
 
 // 디버그 훅
-(window as unknown as { __three?: unknown }).__three = { scene, camera, renderer, controls };
+(window as unknown as { __three?: unknown }).__three = { scene, camera, renderer, controls, groundMeshes, groundAt, isGrounded: () => grounded, tick };
