@@ -65,4 +65,26 @@ const meta = {
   nodes: isl.nodes,
 };
 fs.writeFileSync(path.join(outDir, 'meta.json'), JSON.stringify(meta));
-console.log(JSON.stringify({ seed, RES, trait: meta.trait, nodes: isl.nodes.length }));
+
+// --- 3D 런타임용: 게임 규칙(고도·계간·절벽) 을 JSON 으로 넘긴다 (Phaser 없이 쓰기 위해)
+const b64 = (view, bytes) => Buffer.from(view.buffer, view.byteOffset, bytes).toString('base64');
+const publicDir = process.env.B3D_PUBLIC
+  || path.join(__dirname, '..', '..', 'public', 'island');
+fs.mkdirSync(publicDir, { recursive: true });
+const json = {
+  seed,
+  map: MAP,
+  tile: TILE,
+  spawn: isl.spawn,
+  center: isl.center,
+  mesas: isl.mesas ?? [],
+  hasRiver: !!isl.hasRiver,
+  terrain: isl.terrain?.id ?? null,
+  nodes: isl.nodes,
+  elev: b64(isl.elev, isl.elev.byteLength),
+  steep: b64(isl.steep, MAP * MAP),
+  ramp: b64(isl.ramp, MAP * MAP),
+};
+fs.writeFileSync(path.join(publicDir, `island_${seed}.json`), JSON.stringify(json));
+console.log(JSON.stringify({ seed, RES, trait: meta.trait, nodes: isl.nodes.length,
+  json: path.join(publicDir, `island_${seed}.json`) }));

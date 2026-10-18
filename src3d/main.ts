@@ -120,6 +120,7 @@ gltf.setDRACOLoader(draco);
 const params = new URLSearchParams(location.search);
 const seed = params.get('seed') ?? '824934';
 let worldSpan = { x: WORLD, z: WORLD };
+loadRules(seed);
 
 gltf.load(`/glb/island_${seed}.glb`, (g) => {
   const root = g.scene;
@@ -266,14 +267,100 @@ const down = new THREE.Vector3(0, -1, 0);
 let groundMeshes: THREE.Mesh[] = [];
 let grounded = false;
 
+// ---------- 섬 규칙 데이터 (Phaser 없이 JSON 으로 받는다) ----------
+interface IslandRules {
+  map: number; spawn: { x: number; y: number };
+  mesas: { cx: number; cy: number; R: number; top: number }[];
+  terrain: string | null; hasRiver: boolean;
+  elev: Float32Array; steep: Uint8Array; ramp: Uint8Array;
+}
+let RULES: IslandRules | null = null;
+
+function loadRules(seed: string) {
+  fetch(`/island/island_${seed}.json`)
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+    .then((j: any) => {
+      const map = j.map;
+      const dec = (b64: string, Ctor: any) => {
+        const bin = atob(b64);
+        const buf = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+        return new Ctor(buf.buffer);
+      };
+      RULES = {
+        map, spawn: j.spawn, mesas: j.mesas ?? [],
+        terrain: j.terrain, hasRiver: j.hasRiver,
+        elev: dec(j.elev, Float32Array), steep: dec(j.steep, Uint8Array), ramp: dec(j.ramp, Uint8Array),
+      };
+      (window as unknown as { __rules?: IslandRules }).__rules = RULES;
+      // 해변 스폰 지점에 세운다
+      if (hero) placeAtSpawn();
+    })
+    .catch((e) => { console.warn('[rules]', e); });
+}
+
+const inMap = (x: number, z: number) => !!RULES && x >= 0 && z >= 0 && x < RULES.map && z < RULES.map;
+
+/** 이 타일로 걸어갈 수 있는가 (18-10 절벽·계간 규칙) */
+function walkable(tx: number, ty: number): boolean {
+  if (!RULES) return true;
+  const m = RULES.map;
+  if (tx < 0 || ty < 0 || tx >= m || ty >= m) return false;
+  const i = ty * m + tx;
+  return RULES.steep[i] === 0 && RULES.elev[i] > -0.2;   // 물·절벽 불가
+}
+
+function placeAtSpawn() {
+  if (!hero || !RULES) return;
+  const tx = Math.floor(RULES.spawn.x / 32), ty = Math.floor(RULES.spawn.y / 32);
+  // 스폰 주변에서 '사방이 열려 있는' 자리를 찾는다 (막다른 해변이면 답답함)
+  let best = { x: tx, y: ty, open: -1, gy: -99 };
+  for (let r = 0; r < 10; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const x = tx + dx, y = ty + dy;
+        if (!walkable(x, y)) continue;
+        let open = 0;
+        for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]) {
+          if (walkable(x + ox, y + oy) && walkable(x + ox * 2, y + oy * 2)) open++;
+        }
+        if (open > best.open) {
+          const g = groundAt(x + 0.5, y + 0.5);
+          if (g !== null) best = { x, y, open, gy: g };
+        }
+      }
+    }
+    if (best.open >= 3) break;
+  }
+  if (best.gy > -90) {
+    hero.position.set(best.x + 0.5, best.gy, best.y + 0.5);
+    hero.rotation.y = Math.PI * 0.15;
+    grounded = true;
+    cocify([hero], 0.013);
+    followCam = true;
+    const m = RULES.mesas[0];
+    status.textContent = `도착 · ${RULES.terrain ?? ''}${RULES.hasRiver ? ' · 강' : ''}`
+      + `${m ? ` · 산 ${m.R}타일` : ''} · WASD 이동 / 1-4 동작`;
+  }
+}
+
 function groundAt(x: number, z: number): number | null {
   ray.set(new THREE.Vector3(x, 60, z), down);
   const hit = ray.intersectObjects(groundMeshes, false)[0];
   return hit ? hit.point.y : null;
 }
 
+let placed = false;
+/** 섬 · 생존자 · 규칙이 모두 준비되면 해변 스폰에 배치 */
+function maybePlace() {
+  if (placed || !hero || !groundMeshes.length || !RULES) return;
+  placeAtSpawn();
+  if (grounded) placed = true;
+}
+
 function stepHero(dt: number) {
   if (!hero) return;
+  if (!placed) { maybePlace(); return; }
   if (!grounded) {
     const y = groundAt(hero.position.x, hero.position.z);
     if (y !== null) { hero.position.y = y; grounded = true; cocify([hero], 0.013); }
@@ -284,19 +371,30 @@ function stepHero(dt: number) {
   if (dx || dz) {
     const len = Math.hypot(dx, dz);
     const sp = 4.2 * dt;
-    let nx = hero.position.x + (dx / len) * sp;
-    let nz = hero.position.z + (dz / len) * sp;
-    nx = Math.max(0.5, Math.min(worldSpan.x - 0.5, nx));
-    nz = Math.max(0.5, Math.min(worldSpan.z - 0.5, nz));
-    const y = groundAt(nx, nz);
-    if (y !== null) { hero.position.x = nx; hero.position.z = nz; hero.position.y = y; }
-    else {
-      // 물/바다 위면 이동하지 않는다
-      const y0 = groundAt(nx, hero.position.z);
-      const z1 = groundAt(hero.position.x, nz);
-      if (y0 !== null) { hero.position.x = nx; hero.position.y = y0; }
-      else if (z1 !== null) { hero.position.z = nz; hero.position.y = z1; }
+    const tryMove = (nx: number, nz: number): boolean => {
+      const g = groundAt(nx, nz);
+      if (g === null) return false;
+      if (RULES && !walkable(Math.floor(nx), Math.floor(nz))) return false;  // 절벽·물 불가
+      const cur = hero.position.y;
+      const dist = Math.hypot(nx - hero.position.x, nz - hero.position.z);
+      if (dist > 1e-4) {
+        const grad = Math.abs(cur - g) / dist;
+        if (grad > 0.62) return false;                      // 급경사(계간/절벽)는 못 감
+      }
+      hero.position.set(nx, g, nz);
+      return true;
+    };
+    // 서브스텝: 경계에 부딪히면 그립을 따라 미끄러진다
+    const SUB = 4;
+    let moved = false;
+    for (let s = 0; s < SUB; s++) {
+      const ax = (dx / len) * (sp / SUB), az = (dz / len) * (sp / SUB);
+      if (tryMove(hero.position.x + ax, hero.position.z + az)) { moved = true; continue; }
+      if (tryMove(hero.position.x + ax, hero.position.z)) { moved = true; continue; }
+      if (tryMove(hero.position.x, hero.position.z + az)) { moved = true; continue; }
+      break;
     }
+    if (!moved) { /* 막힘 */ }
     const ang = Math.atan2(dx / len, dz / len) * (180 / Math.PI);
     hero.rotation.y += (((ang + 180) - hero.rotation.y + 540) % 360) - 180;
     if (current !== 'Walk') play('Walk');
