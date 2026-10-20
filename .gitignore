@@ -6,6 +6,7 @@ dist-ssr/
 
 # vite Л╨░Л▀°
 .vite/
+.vite-cache/
 
 # Л≈░Л┘▀ М▄▄Л²╢М■└К²╪Л²╦ Л╓▒Й╟└ Л┌╟Л╤°К╛╪ (Л⌡░КЁ╦Л²─ tools/blender Л≈░Л└° Л·╛Л┐²Л└╠)
 tools/blender/_bundle.cjs
@@ -19,5 +20,5 @@ tools/blender/out/
 Thumbs.db
 desktop.ini
 install.log
-# ©Ь╨╩ дЁ╦╞ем ╦╤╫╨ем(2528px) - ╟тюсю╨ public/char юг 512px ╦╦ ╩Г©К
+# О©╫О©╫О©╫О©╫ дЁО©╫О©╫О©╫О©╫ О©╫О©╫О©╫О©╫О©╫О©╫(2528px) - О©╫О©╫О©╫О©╫О©╫О©╫ public/char О©╫О©╫ 512px О©╫О©╫ О©╫О©╫О©╫
 tools/assets/character/

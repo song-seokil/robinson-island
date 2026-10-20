@@ -1,12 +1,12 @@
 # 이어서 작업하기 (RESUME)
 
-> 마지막 업데이트: 2026-10-17 · 재부팅 직전 저장본
+> 마지막 업데이트: 2026-10-21 · S: 드라이브 이동 완료
 
 ## 0. 재부팅 후 딱 두 줄
 
 ```powershell
 $env:Path = "C:\Users\oocss\tools\node;C:\Users\oocss\tools\git\cmd;$env:Path"
-cd "$env:USERPROFILE\Documents\기본 프로젝트\robinson"; npm run dev
+cd "S:\로빈슨 크루소"; npm run dev
 ```
 
 브라우저에서 **http://localhost:5173** → 화면을 한 번 터치하면 게임 시작.
@@ -58,4 +58,10 @@ cd "$env:USERPROFILE\Documents\기본 프로젝트\robinson"; npm run dev
 - Node: `C:\Users\oocss\tools\node` (v24.22.0) · Git: `C:\Users\oocss\tools\git` · VS Code: `%LOCALAPPDATA%\Programs\Microsoft VS Code`
 - 관리자 권한 없음 / 8GB RAM / 유니티·에뮬레이터 없음
 - 세이브: 브라우저 localStorage 키 `robinson_island_save_v1`
-- 프로젝트 경로: `C:\Users\oocss\Documents\기본 프로젝트\robinson`
+- 프로젝트 경로: `S:\로빈슨 크루소`
+
+## 6. 작업 위치 / Git
+
+- 프로젝트: `S:\로빈슨 크루소`
+- 원격: `https://github.com/song-seokil/robinson-island.git`
+- C: 는 Windows/앱 전용. 프로젝트·캐시·데이터는 S: 또는 D: 를 사용한다.
