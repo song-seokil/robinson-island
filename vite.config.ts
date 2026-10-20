@@ -7,8 +7,13 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
-    // 네트워크 드라이브에서 png/도구 파일까지 감시하면 느려지므로 제외한다.
-    watch: { ignored: ['**/public/**', '**/tools/**', '**/*.png'] },
+    // S: 네트워크 드라이브는 네이티브 fs.watch 를 지원하지 않아 polling 으로 감시한다.
+    // png/도구 파일까지 감시하면 느려지므로 제외한다.
+    watch: {
+      usePolling: true,
+      interval: 1000,
+      ignored: ['**/public/**', '**/tools/**', '**/*.png'],
+    },
   },
   build: {
     target: 'es2020',

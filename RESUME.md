@@ -64,4 +64,5 @@ cd "S:\로빈슨 크루소"; npm run dev
 
 - 프로젝트: `S:\로빈슨 크루소`
 - 원격: `https://github.com/song-seokil/robinson-island.git`
+- 회사 PC: `git clone https://github.com/song-seokil/robinson-island.git` 후 `npm install`
 - C: 는 Windows/앱 전용. 프로젝트·캐시·데이터는 S: 또는 D: 를 사용한다.
