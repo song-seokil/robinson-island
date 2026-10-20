@@ -66,7 +66,7 @@ export class IslandScene extends Phaser.Scene {
   private questFlags = { grown4: false, tower: false, camp: false };
   /** 3/4 뷰 레이어 — 월드 좌표 오브젝트를 이 안에 넣으면 Y 가 눕는다 */
   private worldLayer!: Phaser.GameObjects.Container;
-  private camFollow!: Phaser.GameObjects.GameObject;
+  private camFollow!: { x: number; y: number; getScaleX: () => number; getScaleY: () => number };
   private markInLayer = false;
 
   /** 월드 오브젝트를 3/4 레이어에 넣는다 (화면 좌표는 계속 지상 좌표) */
@@ -102,6 +102,7 @@ export class IslandScene extends Phaser.Scene {
     const self = this;
     this.world = {
       scene: this,
+      textures: this.textures,
       query(from, maxDist, preferStructure) { return self.query(from, maxDist, preferStructure); },
       spawnArrow(owner, target, dmg) { self.projectiles.push(new Projectile('arrow', owner, target, dmg)); },
       spawnBomb(owner, target, dmg, aoe) { self.projectiles.push(new Projectile('bomb', owner, target, dmg, aoe)); },
@@ -163,7 +164,7 @@ export class IslandScene extends Phaser.Scene {
     const cam = this.cameras.main;
     cam.setBounds(0, 0, WORLD_W, VIEW_H);
     cam.setBackgroundColor(C.waterDeep);
-    this.camFollow = { x: this.player.x, y: 0, getScaleX: () => 1, getScaleY: () => 1 } as unknown as Phaser.GameObjects.GameObject;
+    this.camFollow = { x: this.player.x, y: 0, getScaleX: () => 1, getScaleY: () => 1 };
     this.syncCameraTarget();
     cam.startFollow(this.camFollow, true, 0.12, 0.12);
 

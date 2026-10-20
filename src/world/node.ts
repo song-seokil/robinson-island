@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { CRYSTAL_DROPS, FAMILIES, Family, NODE_KINDS, NodeKindDef, nodeHp, nodeYieldMult, requiredTier, LEVEL_MAX, C } from '../core/config';
+import { CRYSTAL_DROPS, FAMILIES, Family, NODE_KINDS, NodeKindDef, nodeHp, nodeYieldMult, requiredTier, LEVEL_MAX, C, PROJ_SIN } from '../core/config';
 import { chips, levelUpSparkle, floatText, ring, burst } from '../fx/fx';
 import { play } from '../core/sfx';
 

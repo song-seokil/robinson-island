@@ -8,6 +8,7 @@ export type Faction = 'player' | 'pirate' | 'neutral';
 /** 전투 개체가 세상을 조회/조작할 때 쓰는 인터페이스 (IslandScene 이 구현) */
 export interface WorldCtx {
   scene: Phaser.Scene;
+  textures: Phaser.Textures.TextureManager;
   /** from 에게 적대적인 가장 가까운 개체 (maxDist 미지정 시 무제한) */
   query(from: Combatant, maxDist?: number, preferStructure?: boolean): Combatant | null;
   spawnArrow(owner: Combatant, target: Combatant, dmg: number): void;
