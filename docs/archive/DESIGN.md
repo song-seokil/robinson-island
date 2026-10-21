@@ -3,7 +3,7 @@
 > ⚠️ **구버전 문서 (2026-10-21 폐기 예정)**
 > 이 문서는 2D 생존·제작·탐험 게임 v0.2입니다.
 > 현재 설계는 **3D CoC형 장난감 병정 은신처/습격 게임**으로 전환되었습니다.
-> 새 기준은 [`GRAYBOX_SPEC.md`](GRAYBOX_SPEC.md)와 추후 `GDD v3.0`입니다.
+> 새 기준은 [`GRAYBOX_SPEC.md`](../design/GRAYBOX_SPEC.md)와 추후 `GDD v3.0`입니다.
 
 > 2D 모바일(가로) 생존 · 채집 · 제작 · 탐험 게임.
 > 스택: TypeScript + Phaser 3 + Vite + Capacitor (Android 먼저, iOS 나중)

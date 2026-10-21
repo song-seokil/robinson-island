@@ -2,19 +2,28 @@
 
 > 마지막 확인: 2026-10-21
 
-## 1. PC
+## 1. 기기 (2대)
 
-| 항목 | 값 |
-|---|---|
-| OS | Windows 10 Home 22H2 (19045) |
-| CPU | Intel Core i7-4710HQ 4C/8T |
-| RAM | 16GB |
-| GPU | NVIDIA GeForce GT 750M 2GB + Intel HD 4600 |
-| C: | Samsung 256GB 내부 SSD |
-| S: | `\\100.85.157.33\share` (Tailscale SMB, 여유 약 7.5TB) |
-| D: | Generic External 128GB USB 외장 |
+| 항목 | 집 (HOME) | 사무실 (OFFICE) |
+|---|---|---|
+| Tailscale 노드 | `desktop-4j2efo2` (100.103.70.38) | `ub-d40-230204` (100.109.162.75) |
+| Windows 사용자 | `oocss` | `UBIVELOX` |
+| 기종 | 미확인 | LG Gram `15ZD90Q-GX56K` |
+| OS | Windows 10 Home 22H2 (19045) | Windows 11 Enterprise (26200) |
+| CPU | i7-4710HQ 4C/8T | i5-1240P 12C/16T |
+| RAM | 16GB | 15.7GB |
+| GPU | GT 750M 2GB + HD 4600 | **Iris Xe (내장, dGPU 없음)** |
+| Unity `6000.3.26f1` | 설치됨 | **미설치** |
+| C: | Samsung 256GB SSD | 미확인 |
 
-## 2. Unity / Android
+- S:는 두 기기 모두 Tailscale 너머 NAS(`ds220j`, `100.85.157.33`)의 공유다. (여유 약 7.5TB)
+- HOME의 D:는 Generic External 128GB USB 외장 — 백업 전용.
+- 사무실 기기는 dGPU가 없지만 **Iris Xe가 GT 750M보다 빠르고 CPU도 3배 이상**이다. 회색박스(빌트인 파이프라인, 큐브)에는 사무실 기기가 유리하다.
+- 단 **사무실 기기에는 Unity가 없어서** 설치 전까지 Play 검증이 불가능하다.
+
+## 2. Unity / Android (HOME 기준)
+
+> OFFICE에는 Unity Hub/Editor가 설치되어 있지 않다. 아래 경로는 HOME 전용이다.
 
 - Unity Hub `3.22.3`
 - Unity Editor `6000.3.26f1`
@@ -30,7 +39,7 @@
   - platforms `34/35/36/37.0`
   - command-line tools `16.0`
 
-## 3. GPU 드라이버
+## 3. GPU 드라이버 (HOME)
 
 - NVIDIA `425.31` 설치됨
 - 보고된 드라이버 버전: `25.21.14.2531`

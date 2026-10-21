@@ -20,5 +20,5 @@ tools/blender/out/
 Thumbs.db
 desktop.ini
 install.log
-# ���� ĳ���� ������(2528px) - ������ public/char �� 512px �� ���
+# 원본 캐릭터 이미지(2528px) - 게임은 public/char 의 512px 를 사용
 tools/assets/character/
